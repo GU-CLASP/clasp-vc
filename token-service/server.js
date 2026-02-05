@@ -227,7 +227,9 @@ app.get("/api/healthz", (req, res) => {
 app.post("/api/invites", requireAdmin, (req, res) => {
   const role = (req.body?.role || "participant").toLowerCase();
   const ttlSeconds = Number(req.body?.ttlSeconds || INVITE_TTL_SECONDS);
-  const maxUses = Number(req.body?.maxUses || INVITE_MAX_USES);
+  let maxUses = Number(req.body?.maxUses || INVITE_MAX_USES);
+  if (Number.isNaN(maxUses)) maxUses = INVITE_MAX_USES;
+  if (maxUses <= 0) maxUses = 0; // 0 = unlimited
 
   const inviteId = randomId(12);
   const inviteSecret = randomId(24);
@@ -270,7 +272,9 @@ app.post("/api/connection-details", async (req, res) => {
       return res.status(410).json({ error: "invite expired" });
     }
 
-    if (inv.uses >= inv.maxUses) return res.status(410).json({ error: "invite already used" });
+    if (inv.maxUses > 0 && inv.uses >= inv.maxUses) {
+      return res.status(410).json({ error: "invite already used" });
+    }
     if (sha256(key) !== inv.secretHash) return res.status(403).json({ error: "invalid key" });
 
     inv.uses += 1;

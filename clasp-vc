@@ -198,7 +198,7 @@ def do_up():
     admin_link = f"{base_url}/admin?adminKey={quote(admin_key)}"
     print(f"Admin link: {admin_link}")
 
-    invite_payload = {"role": "participant", "ttlSeconds": 86400, "maxUses": 10}
+    invite_payload = {"role": "participant", "ttlSeconds": 86400, "maxUses": 0}
     invite_req = urllib.request.Request(
         f"{TOKEN_SERVICE_URL}/api/invites",
         data=json.dumps(invite_payload).encode("utf-8"),

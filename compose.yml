@@ -53,7 +53,7 @@ services:
       - ADMIN_KEY=${ADMIN_KEY}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - INVITE_TTL_SECONDS=86400
-      - INVITE_MAX_USES=10
+      - INVITE_MAX_USES=${INVITE_MAX_USES:-0}
       - RECORDINGS_DIR=/app/recordings
       - EGRESS_FILE_BASE=/out/recordings
       - DELAY_SERVICE_URL=http://127.0.0.1:9100

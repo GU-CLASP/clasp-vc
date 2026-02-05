@@ -3,7 +3,7 @@
 This is a self-hosted video conferencing app for research use. It uses [LiveKit](https://github.com/livekit/livekit) for real-time media, a small token service for invites and admin operations, and a web UI for participants and admins.
 
 Key features:
-- Invite participants with expiring, limited-use links.
+- Invite participants with links.
 - Adjust stream delay per participant for research protocols.
 - Record both a composite (grid) view and individual participant tracks. The composite recording reflects the configured delay, while individual recordings do not.
 
