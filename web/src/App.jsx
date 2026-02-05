@@ -341,6 +341,24 @@ export default function App() {
         name: name || "",
       });
     } catch (e) {
+      const code = e?.code;
+      const isRevoked =
+        code === "identity_revoked" ||
+        e?.status === 409 ||
+        String(e?.message || "").includes("identity_revoked");
+
+      if (isRevoked) {
+        if (inviteId && key) {
+          clearStoredSession(inviteId, key);
+        }
+        setSavedIdentity("");
+        setName("");
+        setAutoJoinBlocked(true);
+        setStatus("idle");
+        setErr("Session was reset by admin. Please enter your name to rejoin.");
+        return;
+      }
+
       setStatus("error");
       setErr(e?.message || "Join failed");
     }
@@ -444,12 +462,10 @@ export default function App() {
         if (removedByAdmin) {
           setAutoJoinBlocked(true);
           if (inviteId && key) {
-            saveStoredSession(inviteId, key, {
-              identity: "",
-              name: name || "",
-            });
+            clearStoredSession(inviteId, key);
           }
           setSavedIdentity("");
+          setName("");
         } else {
           setAutoJoinBlocked(false);
         }

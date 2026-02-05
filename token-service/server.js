@@ -176,6 +176,20 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 4000) {
   }
 }
 
+async function getExistingDelay(room, participant) {
+  if (!room || !participant) return 0;
+  try {
+    const payload = await delayServiceRequest(`/delay/status?room=${encodeURIComponent(room)}`, {
+      method: "GET",
+    });
+    const value = Number(payload?.delays?.[participant] ?? 0);
+    return Number.isFinite(value) ? value : 0;
+  } catch (err) {
+    console.warn("getExistingDelay failed:", err?.message || err);
+    return 0;
+  }
+}
+
 function egressPathFor(room, filename) {
   // Egress file paths must be POSIX-style paths inside the egress container.
   return path.posix.join(EGRESS_FILE_BASE, room, filename);
@@ -315,9 +329,15 @@ app.post("/api/connection-details", async (req, res) => {
     }
     if (sha256(key) !== inv.secretHash) return res.status(403).json({ error: "invalid key" });
 
-    inv.uses += 1;
-
     const requested = sanitizeIdentity(requestedIdentity);
+    if (requested) {
+      const existingSession = identitySessions.get(requested);
+      if (!existingSession || existingSession.inviteId !== inviteId) {
+        return res.status(409).json({ error: "identity_revoked" });
+      }
+    }
+
+    inv.uses += 1;
     if (requested) {
       try {
         await roomService.removeParticipant(inv.room, requested);
@@ -348,12 +368,13 @@ app.post("/api/connection-details", async (req, res) => {
     identitySessions.set(identity, { inviteId, room: inv.room, name: displayName });
 
     try {
+      const existingDelay = await getExistingDelay(inv.room, identity);
       await delayServiceRequest("/delay", {
         method: "POST",
         body: JSON.stringify({
           room: inv.room,
           participant: identity,
-          delayMs: 0,
+          delayMs: existingDelay,
           keepAlive: true,
           participantName: displayName,
         }),
