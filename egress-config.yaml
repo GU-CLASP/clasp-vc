@@ -7,14 +7,3 @@ redis:
 # Connect to your local LiveKit server
 ws_url: ws://127.0.0.1:7880
 insecure: true
-
-# For local dev we can either:
-#  - hardcode the dev key/secret here, OR
-#  - rely on LIVEKIT_API_KEY / LIVEKIT_API_SECRET env vars
-# The Egress docs allow using env vars instead of these fields.
-#
-# Since you already have them in .env, we can omit them here and
-# let the container read them from env:
-#
-# api_key: devkey
-# api_secret: YOUR_SECRET
