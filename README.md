@@ -7,6 +7,15 @@ Key features:
 - Adjust stream delay per participant for research protocols.
 - Record both a composite (grid) view and individual participant tracks. The composite recording reflects the configured delay, while individual recordings do not.
 
+### Recording
+
+The admin can record participants. Recordings are done in two separate views and stored to separate files.
+
+1. Composite/auto-grid view, which reflects the whole group of participants and how they experience each other after having applied various effects (such as delay)
+2. Individual tracks where no effects or adjustments are applied. This is how the participants experience themselves - in realtime.
+
+The recorded files are stored in `./data/recordings`.
+
 ### Development (Localhost)
 
 1. Copy `.env.example` to `.env` and set at least `ADMIN_KEY` and `PUBLIC_BASE_URL`.
