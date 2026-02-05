@@ -24,6 +24,7 @@ export default function AdminPage() {
   const [success, setSuccess] = useState("");
   const [previewConn, setPreviewConn] = useState(null);
   const [previewError, setPreviewError] = useState("");
+  const previewStateRef = useRef({ conn: null, error: "" });
   const [serviceHealth, setServiceHealth] = useState(null);
 
   // Delay controls per participant
@@ -86,7 +87,8 @@ export default function AdminPage() {
       return;
     }
     let cancelled = false;
-    (async () => {
+
+    const loadPreview = async () => {
       try {
         const data = await getPreviewToken(selectedRoom);
         if (!cancelled) {
@@ -96,11 +98,25 @@ export default function AdminPage() {
       } catch (e) {
         if (!cancelled) setPreviewError(e.message || "Failed to load preview");
       }
-    })();
+    };
+
+    loadPreview();
+    const interval = setInterval(() => {
+      const state = previewStateRef.current;
+      if (!state.conn || state.error) {
+        loadPreview();
+      }
+    }, 3000);
+
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
   }, [selectedRoom]);
+
+  useEffect(() => {
+    previewStateRef.current = { conn: previewConn, error: previewError };
+  }, [previewConn, previewError]);
 
   function appendError(message) {
     const entry = {
@@ -388,7 +404,14 @@ export default function AdminPage() {
               <div style={{ color: "#c00", marginBottom: 8 }}>{previewError}</div>
             ) : null}
             {previewConn ? (
-              <CompositePreview conn={previewConn} />
+              <CompositePreview
+                conn={previewConn}
+                streamDelays={streamDelays}
+                onDisconnect={() => {
+                  setPreviewConn(null);
+                  setPreviewError("Preview disconnected, retrying...");
+                }}
+              />
             ) : (
               <div style={{ opacity: 0.6 }}>Loading preview...</div>
             )}
@@ -485,7 +508,7 @@ function hasSubscribedVideo(participant) {
   return false;
 }
 
-function buildPreviewParticipants(room) {
+function buildPreviewParticipants(room, streamDelays) {
   const remotes = Array.from(room.remoteParticipants.values());
   const relays = new Map();
   const originals = new Map();
@@ -506,7 +529,8 @@ function buildPreviewParticipants(room) {
   for (const [id, original] of originals.entries()) {
     const relay = relays.get(id);
     const originalHasVideo = hasSubscribedVideo(original);
-    const shouldUseRelay = relay && !originalHasVideo;
+    const hasDelay = Number(streamDelays?.[id] || 0) > 0;
+    const shouldUseRelay = relay && (hasDelay || !originalHasVideo);
 
     if (shouldUseRelay) {
       usedRelays.add(id);
@@ -548,7 +572,7 @@ function attachTrack(el, track) {
   return attachedEl;
 }
 
-function CompositePreview({ conn }) {
+function CompositePreview({ conn, streamDelays, onDisconnect }) {
   const roomRef = useRef(null);
   const [, bump] = useState(0);
 
@@ -566,7 +590,10 @@ function CompositePreview({ conn }) {
       .on(RoomEvent.ParticipantConnected, onAnyUpdate)
       .on(RoomEvent.ParticipantDisconnected, onAnyUpdate)
       .on(RoomEvent.TrackSubscribed, onAnyUpdate)
-      .on(RoomEvent.TrackUnsubscribed, onAnyUpdate);
+      .on(RoomEvent.TrackUnsubscribed, onAnyUpdate)
+      .on(RoomEvent.Disconnected, () => {
+        if (!cancelled) onDisconnect?.();
+      });
 
     (async () => {
       try {
@@ -590,7 +617,7 @@ function CompositePreview({ conn }) {
   }, [conn?.url, conn?.token]);
 
   const room = roomRef.current;
-  const participants = room ? buildPreviewParticipants(room) : [];
+  const participants = room ? buildPreviewParticipants(room, streamDelays) : [];
 
   return (
     <div

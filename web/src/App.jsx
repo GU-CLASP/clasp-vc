@@ -262,6 +262,7 @@ export default function App() {
   const [status, setStatus] = useState("idle"); // idle | connecting | connected | error
   const [autoJoinBlocked, setAutoJoinBlocked] = useState(false);
   const manualLeaveRef = useRef(false);
+  const localTracksRef = useRef({ video: null, audio: null });
 
   // Check if admin path
   const admin = useMemo(isAdminPath, []);
@@ -295,6 +296,17 @@ export default function App() {
   // Re-render trigger when participants/tracks change
   const [, bump] = useState(0);
   const forceRender = () => bump((x) => x + 1);
+
+  function clearLocalTracks() {
+    const { video, audio } = localTracksRef.current;
+    try {
+      video?.stop?.();
+    } catch {}
+    try {
+      audio?.stop?.();
+    } catch {}
+    localTracksRef.current = { video: null, audio: null };
+  }
 
   async function onJoin() {
     setAutoJoinBlocked(false);
@@ -360,6 +372,7 @@ export default function App() {
     try {
       room?.disconnect();
     } catch {}
+    clearLocalTracks();
     roomRef.current = null;
   }
 
@@ -416,6 +429,7 @@ export default function App() {
         setStatus("idle");
         setConn(null);
         roomRef.current = null;
+        clearLocalTracks();
 
         if (manualLeaveRef.current) {
           manualLeaveRef.current = false;
@@ -473,9 +487,14 @@ export default function App() {
           video: true,
         });
 
+        const localVideo = tracks.find((t) => t.kind === Track.Kind.Video) || null;
+        const localAudio = tracks.find((t) => t.kind === Track.Kind.Audio) || null;
+        localTracksRef.current = { video: localVideo, audio: localAudio };
+
         for (const t of tracks) {
           await room.localParticipant.publishTrack(t);
         }
+        forceRender();
       } catch (e) {
         console.warn("local media error:", e);
         if (!cancelled) {
@@ -492,6 +511,7 @@ export default function App() {
       try {
         room.disconnect();
       } catch {}
+      clearLocalTracks();
       roomRef.current = null;
     };
   }, [conn]);
@@ -578,6 +598,11 @@ export default function App() {
             participant={p.participant}
             displayName={p.displayName}
             displayIdentity={p.displayIdentity}
+            overrideVideoTrack={
+              room && p.participant.identity === room.localParticipant.identity
+                ? localTracksRef.current.video
+                : null
+            }
           />
         ))}
       </div>
@@ -711,7 +736,7 @@ function RecordingView() {
   );
 }
 
-function ParticipantCard({ participant, displayName, displayIdentity }) {
+function ParticipantCard({ participant, displayName, displayIdentity, overrideVideoTrack }) {
   const videoRef = useRef(null);
   const audioRef = useRef(null);
 
@@ -728,8 +753,9 @@ function ParticipantCard({ participant, displayName, displayIdentity }) {
     const el = videoRef.current;
     if (!el) return;
 
-    if (videoPub?.track) {
-      attachTrack(el, videoPub.track);
+    const track = overrideVideoTrack || videoPub?.track;
+    if (track) {
+      attachTrack(el, track);
       el.muted = true; // prevent local echo; remote video doesn’t carry audio anyway
       el.playsInline = true;
       el.autoplay = true;
@@ -739,7 +765,7 @@ function ParticipantCard({ participant, displayName, displayIdentity }) {
         el.srcObject = null;
       } catch {}
     }
-  }, [videoPub?.trackSid, videoPub?.track]);
+  }, [videoPub?.trackSid, videoPub?.track, overrideVideoTrack]);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -797,7 +823,7 @@ function ParticipantCard({ participant, displayName, displayIdentity }) {
       <audio ref={audioRef} />
 
       <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-        video: {videoPub?.track ? "subscribed" : "none"} | audio:{" "}
+        video: {overrideVideoTrack ? "local" : videoPub?.track ? "subscribed" : "none"} | audio:{" "}
         {audioPub?.track ? "subscribed" : "none"}
       </div>
     </div>
