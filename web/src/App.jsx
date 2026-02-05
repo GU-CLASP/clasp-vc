@@ -263,6 +263,7 @@ export default function App() {
   const [autoJoinBlocked, setAutoJoinBlocked] = useState(false);
   const manualLeaveRef = useRef(false);
   const localTracksRef = useRef({ video: null, audio: null });
+  const [serverOffline, setServerOffline] = useState(false);
 
   // Check if admin path
   const admin = useMemo(isAdminPath, []);
@@ -400,6 +401,25 @@ export default function App() {
       onJoin();
     }
   }, [token, roomName, conn]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkHealth = async () => {
+      try {
+        const r = await fetch("/api/healthz", { cache: "no-store" });
+        if (!r.ok) throw new Error(`status ${r.status}`);
+        if (!cancelled) setServerOffline(false);
+      } catch {
+        if (!cancelled) setServerOffline(true);
+      }
+    };
+    checkHealth();
+    const interval = setInterval(checkHealth, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Auto-join if we have a saved identity for this invite
   useEffect(() => {
@@ -545,6 +565,11 @@ export default function App() {
     if (savedIdentity && !autoJoinBlocked && status !== "error") {
       return (
         <div style={{ padding: 24, fontFamily: "system-ui", maxWidth: 520 }}>
+          {serverOffline ? (
+            <div style={{ marginBottom: 12, padding: 10, background: "#fee", color: "#a00", borderRadius: 6 }}>
+              Server appears to be offline or shutting down.
+            </div>
+          ) : null}
           <h2>Rejoining session</h2>
           <p>Connecting you back to the room...</p>
           {err ? <p style={{ marginTop: 12, color: "crimson" }}>{err}</p> : null}
@@ -554,6 +579,11 @@ export default function App() {
 
     return (
       <div style={{ padding: 24, fontFamily: "system-ui", maxWidth: 520 }}>
+        {serverOffline ? (
+          <div style={{ marginBottom: 12, padding: 10, background: "#fee", color: "#a00", borderRadius: 6 }}>
+            Server appears to be offline or shutting down.
+          </div>
+        ) : null}
         <h2>Join session</h2>
         <p>Enter an optional display name, then join.</p>
 
@@ -587,6 +617,11 @@ export default function App() {
 
   return (
     <div style={{ fontFamily: "system-ui", padding: 12 }}>
+      {serverOffline ? (
+        <div style={{ marginBottom: 10, padding: 10, background: "#fee", color: "#a00", borderRadius: 6 }}>
+          Server appears to be offline or shutting down.
+        </div>
+      ) : null}
       <div style={{ marginBottom: 10 }}>
         <b>Status:</b> {status}{" "}
         {room ? (

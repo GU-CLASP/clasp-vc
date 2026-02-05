@@ -26,6 +26,8 @@ export default function AdminPage() {
   const [previewError, setPreviewError] = useState("");
   const previewStateRef = useRef({ conn: null, error: "" });
   const [serviceHealth, setServiceHealth] = useState(null);
+  const [serverOffline, setServerOffline] = useState(false);
+  const serverOfflineRef = useRef(false);
 
   // Delay controls per participant
   const [delayValues, setDelayValues] = useState({});
@@ -63,13 +65,40 @@ export default function AdminPage() {
   }, [selectedRoom]);
 
   useEffect(() => {
+    serverOfflineRef.current = serverOffline;
+  }, [serverOffline]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkHealthz = async () => {
+      try {
+        const r = await fetch("/api/healthz", { cache: "no-store" });
+        if (!r.ok) throw new Error(`status ${r.status}`);
+        if (!cancelled) setServerOffline(false);
+      } catch {
+        if (!cancelled) setServerOffline(true);
+      }
+    };
+    checkHealthz();
+    const interval = setInterval(checkHealthz, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     const runHealth = async () => {
       try {
+        if (serverOffline) {
+          if (!cancelled) setServiceHealth(null);
+          return;
+        }
         const data = await getHealth();
         if (!cancelled) setServiceHealth(data);
       } catch (e) {
-        if (!cancelled) appendError(`health check failed: ${e?.message || e}`);
+        if (!cancelled && !serverOffline) appendError(`health check failed: ${e?.message || e}`);
       }
     };
     runHealth();
@@ -78,7 +107,7 @@ export default function AdminPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [serverOffline]);
 
   useEffect(() => {
     if (!selectedRoom) {
@@ -90,6 +119,10 @@ export default function AdminPage() {
 
     const loadPreview = async () => {
       try {
+        if (serverOfflineRef.current) {
+          if (!cancelled) setPreviewError("Server appears offline");
+          return;
+        }
         const data = await getPreviewToken(selectedRoom);
         if (!cancelled) {
           setPreviewConn(data);
@@ -103,6 +136,7 @@ export default function AdminPage() {
     loadPreview();
     const interval = setInterval(() => {
       const state = previewStateRef.current;
+      if (serverOfflineRef.current) return;
       if (!state.conn || state.error) {
         loadPreview();
       }
@@ -129,36 +163,43 @@ export default function AdminPage() {
 
   async function refreshParticipants() {
     if (!selectedRoom) return;
+    if (serverOfflineRef.current) return;
     try {
       const data = await getParticipants(selectedRoom);
       setParticipants(data.participants || []);
     } catch (e) {
-      appendError(`participants refresh failed: ${e?.message || e}`);
+      if (!serverOffline) appendError(`participants refresh failed: ${e?.message || e}`);
     }
   }
 
   async function refreshRecordingStatus() {
     if (!selectedRoom) return;
+    if (serverOfflineRef.current) return;
     try {
       const data = await getRecordingStatus(selectedRoom);
       setRecordingStatus(data.recordings || {});
     } catch (e) {
-      appendError(`recording status failed: ${e?.message || e}`);
+      if (!serverOffline) appendError(`recording status failed: ${e?.message || e}`);
     }
   }
 
   async function refreshStreamDelays() {
     if (!selectedRoom) return;
+    if (serverOfflineRef.current) return;
     try {
       const data = await getStreamDelayStatus(selectedRoom);
       setStreamDelays(data.delays || {});
     } catch (e) {
-      appendError(`stream delay status failed: ${e?.message || e}`);
+      if (!serverOffline) appendError(`stream delay status failed: ${e?.message || e}`);
     }
   }
 
   async function handleSetDelay(participant, delayMs) {
     if (!selectedRoom) return;
+    if (serverOffline) {
+      appendError("set delay failed: server appears offline");
+      return;
+    }
     setLoading(true);
     try {
       await setStreamDelay(selectedRoom, participant, delayMs);
@@ -174,6 +215,10 @@ export default function AdminPage() {
 
   async function handleRemoveParticipant(identity) {
     if (!selectedRoom) return;
+    if (serverOffline) {
+      appendError("remove participant failed: server appears offline");
+      return;
+    }
     setLoading(true);
     try {
       await removeParticipant(selectedRoom, identity);
@@ -190,6 +235,10 @@ export default function AdminPage() {
 
   async function handleToggleRecording() {
     if (!selectedRoom) return;
+    if (serverOffline) {
+      appendError("recording toggle failed: server appears offline");
+      return;
+    }
     setLoading(true);
     try {
       const anyActive = isRecordingActive("individual") || isRecordingActive("composite");
@@ -231,6 +280,11 @@ export default function AdminPage() {
       <div style={{ marginBottom: 16 }}>
         <strong>Service Health:</strong>
         <div style={{ marginTop: 6, fontSize: 13 }}>
+          {serverOffline ? (
+            <span style={{ color: "crimson", marginRight: 12 }}>
+              token-service: down
+            </span>
+          ) : null}
           <span style={{ marginRight: 12 }}>
             delay-service:{" "}
             <span style={{ color: serviceHealth?.delayService?.ok ? "green" : "crimson" }}>
