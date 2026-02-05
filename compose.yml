@@ -1,0 +1,95 @@
+services:
+  redis:
+    image: docker.io/redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    network_mode: "host"
+    volumes:
+      - ./data/redis:/data:Z
+
+  livekit:
+    image: docker.io/livekit/livekit-server:latest
+    network_mode: "host"
+    command: ["--config", "/etc/livekit.yaml"]
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:Z
+    environment:
+      - LIVEKIT_KEYS=${LIVEKIT_KEYS}
+    depends_on:
+      - redis
+
+  egress:
+    image: docker.io/livekit/egress:latest
+    network_mode: "host"
+    depends_on:
+      - redis
+      - livekit
+    # where egress will read its config from
+    volumes:
+      - ./egress-config.yaml:/out/config.yaml:Z
+      # shared recordings directory on the host, so you can access files easily
+      - ./data/recordings:/out/recordings:Z
+    environment:
+      # tell egress where the config file is
+      - EGRESS_CONFIG_FILE=/out/config.yaml
+      # reuse your existing secrets from .env (podman-compose will substitute)
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+
+
+  token-service:
+    image: docker.io/node:20-alpine
+    network_mode: "host"
+    working_dir: /app
+    volumes:
+      - ./token-service:/app:Z
+      - ./data/recordings:/app/recordings:Z
+    command: ["sh", "-lc", "npm install && node server.js"]
+    environment:
+      - PORT=9000
+      - LIVEKIT_URL=${LIVEKIT_URL}
+      - LIVEKIT_URL_INTERNAL=${LIVEKIT_URL_INTERNAL}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - ADMIN_KEY=${ADMIN_KEY}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+      - INVITE_TTL_SECONDS=86400
+      - INVITE_MAX_USES=10
+      - RECORDINGS_DIR=/app/recordings
+      - EGRESS_FILE_BASE=/out/recordings
+      - DELAY_SERVICE_URL=http://127.0.0.1:9100
+
+  web:
+    depends_on:
+      - token-service
+    image: docker.io/node:20-alpine
+    network_mode: "host"
+    working_dir: /app
+    volumes:
+      - ./web:/app:Z
+    command: >
+      sh -lc "node -v && npm -v && npm install &&
+      until wget -T 2 -qO- http://127.0.0.1:9000/api/healthz >/dev/null; do
+        echo waiting for token-service; sleep 1;
+      done;
+      npx vite --host 0.0.0.0 --port 5173"
+    environment:
+      - NODE_ENV=development
+      - VITE_BASE_PATH=${VITE_BASE_PATH}
+      - VITE_ALLOWED_HOSTS=${VITE_ALLOWED_HOSTS}
+
+  delay-service:
+    image: docker.io/node:20-bullseye
+    network_mode: "host"
+    working_dir: /app
+    volumes:
+      - ./delay-service:/app:Z
+    command: >
+      sh -lc "apt-get update && apt-get install -y libpulse0 &&
+      npm install && node server.js"
+    environment:
+      - PORT=9100
+      - LIVEKIT_URL=${LIVEKIT_URL}
+      - LIVEKIT_URL_INTERNAL=${LIVEKIT_URL_INTERNAL}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - ADMIN_KEY=${ADMIN_KEY}

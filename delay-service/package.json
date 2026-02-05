@@ -1,0 +1,10 @@
+{
+  "name": "delay-service",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@livekit/rtc-node": "^0.13.18",
+    "express": "^4.19.2",
+    "livekit-server-sdk": "^2.15.0"
+  }
+}

@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from urllib.parse import quote
+
+
+REPO_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_PUBLIC_BASE_URL = "http://127.0.0.1:5173"
+TOKEN_SERVICE_URL = "http://127.0.0.1:9000"
+INVITE_LINK_FILE = os.path.join(REPO_DIR, ".invite-link")
+COLOR_GREEN = "\033[32m"
+COLOR_RED = "\033[31m"
+COLOR_RESET = "\033[0m"
+
+
+def colorize(text, color):
+    if not sys.stdout.isatty():
+        return text
+    if os.environ.get("NO_COLOR"):
+        return text
+    return f"{color}{text}{COLOR_RESET}"
+
+
+def load_env_file(path):
+    env = {}
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("export "):
+                    line = line[len("export ") :]
+                if "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                    value = value[1:-1]
+                env[key] = value
+    except FileNotFoundError:
+        return env
+    return env
+
+
+def wait_for_health(url, timeout_seconds=60):
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=2) as response:
+                if response.status == 200:
+                    return True
+        except urllib.error.URLError:
+            pass
+        time.sleep(1)
+    return False
+
+
+def usage():
+    print("Usage: clasp-vc up | clasp-vc down | clasp-vc status", file=sys.stderr)
+
+
+def run_podman_compose(args, capture_stdout=False):
+    try:
+        result = subprocess.run(
+            ["podman-compose", *args],
+            cwd=REPO_DIR,
+            stdout=subprocess.PIPE if capture_stdout else subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except FileNotFoundError:
+        print("podman-compose not found in PATH.", file=sys.stderr)
+        return None
+
+    if result.returncode != 0:
+        error_text = result.stderr.strip()
+        if error_text:
+            print(error_text, file=sys.stderr)
+    return result
+
+
+def do_down():
+    print("shutting down containers...")
+    result = run_podman_compose(["down"])
+    if result is None:
+        return 1
+    if result.returncode != 0:
+        print(f"podman-compose down failed with exit code {result.returncode}.", file=sys.stderr)
+        return result.returncode
+    try:
+        os.remove(INVITE_LINK_FILE)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        print(f"Failed to remove {INVITE_LINK_FILE}: {exc}", file=sys.stderr)
+    return 0
+
+
+def load_runtime_config():
+    env_from_file = load_env_file(os.path.join(REPO_DIR, ".env"))
+    admin_key = os.environ.get("ADMIN_KEY") or env_from_file.get("ADMIN_KEY")
+    public_base_url = (
+        os.environ.get("PUBLIC_BASE_URL")
+        or env_from_file.get("PUBLIC_BASE_URL")
+        or DEFAULT_PUBLIC_BASE_URL
+    )
+    return admin_key, public_base_url
+
+
+def write_invite_link(invite_url):
+    try:
+        with open(INVITE_LINK_FILE, "w", encoding="utf-8") as handle:
+            handle.write(invite_url)
+            handle.write("\n")
+    except OSError as exc:
+        print(f"Failed to write {INVITE_LINK_FILE}: {exc}", file=sys.stderr)
+
+
+def read_invite_link():
+    try:
+        with open(INVITE_LINK_FILE, "r", encoding="utf-8") as handle:
+            return handle.read().strip()
+    except FileNotFoundError:
+        return ""
+    except OSError as exc:
+        print(f"Failed to read {INVITE_LINK_FILE}: {exc}", file=sys.stderr)
+        return ""
+
+
+def do_status():
+    running = run_podman_compose(["ps", "-q"], capture_stdout=True)
+    if running is None:
+        return 1
+    if running.returncode != 0:
+        print("Failed to check running containers.", file=sys.stderr)
+        return 1
+    if not (running.stdout or "").strip():
+        status = colorize("down", COLOR_RED)
+        print(f"status: {status}")
+        return 0
+
+    status = colorize("up", COLOR_GREEN)
+    print(f"status: {status}")
+    admin_key, public_base_url = load_runtime_config()
+    if admin_key:
+        base_url = public_base_url.rstrip("/")
+        admin_link = f"{base_url}/admin?adminKey={quote(admin_key)}"
+        print(f"Admin link: {admin_link}")
+    else:
+        print("Admin link: (missing ADMIN_KEY)")
+
+    invite_link = read_invite_link()
+    if invite_link:
+        print(f"Invite link: {invite_link}")
+    else:
+        print(f"Invite link: (missing {os.path.basename(INVITE_LINK_FILE)})")
+    return 0
+
+
+def do_up():
+    admin_key, public_base_url = load_runtime_config()
+
+    if not admin_key:
+        print("ADMIN_KEY is missing. Set it in .env or your environment.", file=sys.stderr)
+        return 1
+
+    running = run_podman_compose(["ps", "-q"], capture_stdout=True)
+    if running is None:
+        return 1
+    if running.returncode != 0:
+        print("Failed to check running containers.", file=sys.stderr)
+        return 1
+    if running.stdout.strip() if running.stdout is not None else False:
+        print("Containers are already running. Aborting.", file=sys.stderr)
+        return 1
+
+    print("starting containers...")
+    up_run = run_podman_compose(["up", "-d"])
+    if up_run is None:
+        return 1
+    if up_run.returncode != 0:
+        print(f"podman-compose up failed with exit code {up_run.returncode}.", file=sys.stderr)
+        return up_run.returncode
+
+    health_url = f"{TOKEN_SERVICE_URL}/api/healthz"
+    if not wait_for_health(health_url):
+        print("Timed out waiting for token-service to become healthy.", file=sys.stderr)
+        return 1
+
+    base_url = public_base_url.rstrip("/")
+    admin_link = f"{base_url}/admin?adminKey={quote(admin_key)}"
+    print(f"Admin link: {admin_link}")
+
+    invite_payload = {"role": "participant", "ttlSeconds": 86400, "maxUses": 10}
+    invite_req = urllib.request.Request(
+        f"{TOKEN_SERVICE_URL}/api/invites",
+        data=json.dumps(invite_payload).encode("utf-8"),
+        headers={"content-type": "application/json", "x-admin-key": admin_key},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(invite_req, timeout=5) as response:
+            body = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8") if exc.fp else ""
+        print(f"Invite creation failed: {exc.code} {exc.reason}. {detail}", file=sys.stderr)
+        return 1
+    except urllib.error.URLError as exc:
+        print(f"Invite creation failed: {exc.reason}.", file=sys.stderr)
+        return 1
+
+    try:
+        invite_data = json.loads(body)
+    except json.JSONDecodeError:
+        print("Invite creation returned invalid JSON.", file=sys.stderr)
+        return 1
+
+    invite_url = invite_data.get("inviteUrl")
+    if not invite_url:
+        print("Invite creation response missing inviteUrl.", file=sys.stderr)
+        return 1
+
+    write_invite_link(invite_url)
+    print(f"Invite link: {invite_url}")
+    return 0
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2 or sys.argv[1] not in ("up", "down", "status"):
+        usage()
+        raise SystemExit(1)
+    if sys.argv[1] == "down":
+        raise SystemExit(do_down())
+    if sys.argv[1] == "status":
+        raise SystemExit(do_status())
+    raise SystemExit(do_up())

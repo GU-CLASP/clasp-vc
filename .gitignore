@@ -1,0 +1,7 @@
+**/node_modules/
+**/recordings/
+data/
+.env
+.env.*
+!.env.example
+.invite-link
