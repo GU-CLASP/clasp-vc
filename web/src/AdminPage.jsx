@@ -1,28 +1,30 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
 import {
-  getRooms,
+  getRoom,
   getParticipants,
+  removeParticipant,
   startRecording,
   stopRecording,
   getRecordingStatus,
   setStreamDelay,
   getStreamDelayStatus,
   getPreviewToken,
+  getHealth,
 } from "./adminApi.js";
 
 export default function AdminPage() {
-  const [rooms, setRooms] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState(null);
-  const selectedRoomRef = useRef(null);
   const [participants, setParticipants] = useState([]);
   const [recordingStatus, setRecordingStatus] = useState({});
   const [streamDelays, setStreamDelays] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [errorLog, setErrorLog] = useState([]);
   const [success, setSuccess] = useState("");
   const [previewConn, setPreviewConn] = useState(null);
   const [previewError, setPreviewError] = useState("");
+  const [serviceHealth, setServiceHealth] = useState(null);
 
   // Delay controls per participant
   const [delayValues, setDelayValues] = useState({});
@@ -31,14 +33,19 @@ export default function AdminPage() {
   );
 
   useEffect(() => {
-    refreshRooms();
-    const interval = setInterval(refreshRooms, 3000); // Refresh every 3 seconds
-    return () => clearInterval(interval);
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getRoom();
+        if (!cancelled) setSelectedRoom(data.room || null);
+      } catch (e) {
+        if (!cancelled) appendError(`room load failed: ${e?.message || e}`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
-
-  useEffect(() => {
-    selectedRoomRef.current = selectedRoom;
-  }, [selectedRoom]);
 
   useEffect(() => {
     if (selectedRoom) {
@@ -53,6 +60,24 @@ export default function AdminPage() {
       return () => clearInterval(interval);
     }
   }, [selectedRoom]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const runHealth = async () => {
+      try {
+        const data = await getHealth();
+        if (!cancelled) setServiceHealth(data);
+      } catch (e) {
+        if (!cancelled) appendError(`health check failed: ${e?.message || e}`);
+      }
+    };
+    runHealth();
+    const interval = setInterval(runHealth, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedRoom) {
@@ -77,23 +102,13 @@ export default function AdminPage() {
     };
   }, [selectedRoom]);
 
-  async function refreshRooms() {
-    try {
-      const data = await getRooms();
-      const nextRooms = data.rooms || [];
-      setRooms(nextRooms);
-      const currentSelected = selectedRoomRef.current;
-      if (currentSelected && !nextRooms.some((room) => room.name === currentSelected)) {
-        setSelectedRoom(null);
-        setParticipants([]);
-        setRecordingStatus({});
-        setStreamDelays({});
-        setDelayValues({});
-      }
-      setError("");
-    } catch (e) {
-      setError(e.message);
-    }
+  function appendError(message) {
+    const entry = {
+      time: new Date().toLocaleTimeString(),
+      message,
+    };
+    setError(message);
+    setErrorLog((prev) => [...prev, entry].slice(-50));
   }
 
   async function refreshParticipants() {
@@ -101,9 +116,8 @@ export default function AdminPage() {
     try {
       const data = await getParticipants(selectedRoom);
       setParticipants(data.participants || []);
-      setError("");
     } catch (e) {
-      setError(e.message);
+      appendError(`participants refresh failed: ${e?.message || e}`);
     }
   }
 
@@ -112,9 +126,8 @@ export default function AdminPage() {
     try {
       const data = await getRecordingStatus(selectedRoom);
       setRecordingStatus(data.recordings || {});
-      setError("");
     } catch (e) {
-      setError(e.message);
+      appendError(`recording status failed: ${e?.message || e}`);
     }
   }
 
@@ -123,9 +136,8 @@ export default function AdminPage() {
     try {
       const data = await getStreamDelayStatus(selectedRoom);
       setStreamDelays(data.delays || {});
-      setError("");
     } catch (e) {
-      setError(e.message);
+      appendError(`stream delay status failed: ${e?.message || e}`);
     }
   }
 
@@ -138,7 +150,23 @@ export default function AdminPage() {
       setTimeout(() => setSuccess(""), 3000);
       refreshStreamDelays();
     } catch (e) {
-      setError(e.message);
+      appendError(`set delay failed: ${e?.message || e}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRemoveParticipant(identity) {
+    if (!selectedRoom) return;
+    setLoading(true);
+    try {
+      await removeParticipant(selectedRoom, identity);
+      setSuccess(`Removed ${identity}`);
+      setTimeout(() => setSuccess(""), 3000);
+      refreshParticipants();
+      refreshStreamDelays();
+    } catch (e) {
+      appendError(`remove participant failed: ${e?.message || e}`);
     } finally {
       setLoading(false);
     }
@@ -160,7 +188,7 @@ export default function AdminPage() {
       setTimeout(() => setSuccess(""), 3000);
       refreshRecordingStatus();
     } catch (e) {
-      setError(e.message);
+      appendError(`recording toggle failed: ${e?.message || e}`);
     } finally {
       setLoading(false);
     }
@@ -177,42 +205,35 @@ export default function AdminPage() {
     <div style={{ fontFamily: "system-ui", padding: 24, maxWidth: 1200, margin: "0 auto" }}>
       <h1>Video Conference Admin Panel</h1>
 
-      <div style={{ marginBottom: 24 }}>
-        <h2>Select Room</h2>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          {rooms.length === 0 ? (
-            <p style={{ opacity: 0.6 }}>No active rooms</p>
-          ) : (
-            rooms.map((room) => (
-              <button
-                key={room.name}
-                onClick={() => {
-                  setSelectedRoom(room.name);
-                  setDelayValues({}); // Reset delay controls
-                }}
-                style={{
-                  padding: "10px 14px",
-                  backgroundColor: selectedRoom === room.name ? "#0066cc" : "#f0f0f0",
-                  color: selectedRoom === room.name ? "white" : "black",
-                  border: "1px solid #ccc",
-                  borderRadius: 4,
-                  cursor: "pointer",
-                  fontWeight: selectedRoom === room.name ? "bold" : "normal",
-                }}
-              >
-                {room.name}
-                <br />
-                <span style={{ fontSize: 11, opacity: 0.7 }}>
-                  {(room.realParticipantCount ?? room.participantCount)} participant
-                  {(room.realParticipantCount ?? room.participantCount) !== 1 ? "s" : ""}
-                </span>
-              </button>
-            ))
-          )}
+      <div style={{ marginBottom: 16 }}>
+        <strong>Room:</strong>{" "}
+        <span style={{ opacity: 0.8 }}>
+          {selectedRoom || "Loading..."}
+        </span>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <strong>Service Health:</strong>
+        <div style={{ marginTop: 6, fontSize: 13 }}>
+          <span style={{ marginRight: 12 }}>
+            delay-service:{" "}
+            <span style={{ color: serviceHealth?.delayService?.ok ? "green" : "crimson" }}>
+              {serviceHealth?.delayService?.ok ? "up" : "down"}
+            </span>
+            {serviceHealth?.delayService?.ms != null ? ` (${serviceHealth.delayService.ms}ms)` : ""}
+            {serviceHealth?.delayService?.error ? ` - ${serviceHealth.delayService.error}` : ""}
+          </span>
+          <span>
+            livekit:{" "}
+            <span style={{ color: serviceHealth?.livekit?.ok ? "green" : "crimson" }}>
+              {serviceHealth?.livekit?.ok ? "up" : "down"}
+            </span>
+            {serviceHealth?.livekit?.error ? ` - ${serviceHealth.livekit.error}` : ""}
+          </span>
         </div>
       </div>
 
-      {selectedRoom && (
+      {selectedRoom ? (
         <>
           <div
             style={{
@@ -331,6 +352,21 @@ export default function AdminPage() {
                       >
                         Apply
                       </button>
+                      <button
+                        onClick={() => handleRemoveParticipant(participant.identity)}
+                        disabled={loading}
+                        style={{
+                          padding: "4px 8px",
+                          backgroundColor: "#d9534f",
+                          color: "white",
+                          border: "none",
+                          borderRadius: 3,
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        Remove
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -398,8 +434,36 @@ export default function AdminPage() {
               </div>
             )}
           </div>
+
         </>
-      )}
+      ) : null}
+
+      <div style={{ marginTop: 16 }}>
+        <strong>Error Log</strong>
+        <div
+          style={{
+            marginTop: 8,
+            maxHeight: 180,
+            overflow: "auto",
+            background: "#fafafa",
+            border: "1px solid #eee",
+            borderRadius: 6,
+            padding: 8,
+            fontSize: 12,
+          }}
+        >
+          {errorLog.length === 0 ? (
+            <div style={{ opacity: 0.6 }}>No errors yet.</div>
+          ) : (
+            errorLog.map((entry, idx) => (
+              <div key={`${entry.time}-${idx}`} style={{ marginBottom: 6 }}>
+                <span style={{ color: "#888", marginRight: 6 }}>{entry.time}</span>
+                <span>{entry.message}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -408,6 +472,16 @@ function isPreviewableIdentity(identity) {
   if (!identity) return false;
   if (identity.startsWith("relay_")) return true;
   if (identity.startsWith("p_")) return true;
+  return false;
+}
+
+function hasSubscribedVideo(participant) {
+  if (!participant) return false;
+  for (const pub of participant.trackPublications.values()) {
+    if (pub.kind === Track.Kind.Video && pub.track && pub.isSubscribed) {
+      return true;
+    }
+  }
   return false;
 }
 
@@ -427,31 +501,38 @@ function buildPreviewParticipants(room) {
   }
 
   const list = [];
+  const usedRelays = new Set();
+
   for (const [id, original] of originals.entries()) {
     const relay = relays.get(id);
-    if (relay) {
+    const originalHasVideo = hasSubscribedVideo(original);
+    const shouldUseRelay = relay && !originalHasVideo;
+
+    if (shouldUseRelay) {
+      usedRelays.add(id);
       list.push({
         key: `relay:${relay.identity}`,
         participant: relay,
         displayName: original.name || original.identity,
         displayIdentity: original.identity,
       });
-    } else {
-      list.push({
-        key: `remote:${original.identity}`,
-        participant: original,
-        displayName: original.name || original.identity,
-        displayIdentity: original.identity,
-      });
+      continue;
     }
+
+    list.push({
+      key: `remote:${original.identity}`,
+      participant: original,
+      displayName: original.name || original.identity,
+      displayIdentity: original.identity,
+    });
   }
 
   for (const [id, relay] of relays.entries()) {
-    if (originals.has(id)) continue;
+    if (originals.has(id) || usedRelays.has(id)) continue;
     list.push({
       key: `relay:${relay.identity}`,
       participant: relay,
-      displayName: id,
+      displayName: relay.name || id,
       displayIdentity: id,
     });
   }

@@ -86,6 +86,9 @@ const INVITE_MAX_USES = Number(process.env.INVITE_MAX_USES || 1);
 // For anything serious, swap to Redis/Postgres.
 const invites = new Map(); // inviteId -> { secretHash, room, role, exp, uses, maxUses }
 
+// Track participant identities issued per invite so we can clean up relays on leave.
+const identitySessions = new Map(); // identity -> { inviteId, room, name }
+
 function toWsUrl(u) {
   return u.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
 }
@@ -104,8 +107,22 @@ function randomId(bytes = 16) {
   return crypto.randomBytes(bytes).toString("base64url");
 }
 
+const DEFAULT_ROOM_NAME =
+  process.env.SINGLE_ROOM_NAME ||
+  process.env.DEFAULT_ROOM_NAME ||
+  process.env.ROOM_NAME ||
+  `room_${randomId(12)}`;
+
 function sha256(s) {
   return crypto.createHash("sha256").update(s).digest("hex");
+}
+
+function sanitizeIdentity(raw) {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (!/^p_[A-Za-z0-9_-]{3,64}$/.test(trimmed)) return null;
+  return trimmed;
 }
 
 function formatTimestamp(d = new Date()) {
@@ -130,12 +147,33 @@ async function delayServiceRequest(pathname, options = {}) {
     "x-admin-key": ADMIN_KEY,
     ...(options.headers || {}),
   };
-  const res = await fetch(url, { ...options, headers });
+  const started = Date.now();
+  let res;
+  try {
+    res = await fetchWithTimeout(url, { ...options, headers }, 5000);
+  } catch (err) {
+    const ms = Date.now() - started;
+    console.error(`[delay-service] ${options.method || "GET"} ${pathname} -> network error (${ms}ms):`, err?.message || err);
+    throw new Error(`delay-service request failed: ${err?.message || err}`);
+  }
+  const ms = Date.now() - started;
   if (!res.ok) {
     const t = await res.text().catch(() => "");
+    console.error(`[delay-service] ${options.method || "GET"} ${pathname} -> ${res.status} (${ms}ms): ${t}`);
     throw new Error(`delay-service failed: ${res.status} ${t}`);
   }
+  console.log(`[delay-service] ${options.method || "GET"} ${pathname} -> ${res.status} (${ms}ms)`);
   return res.json();
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 4000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function egressPathFor(room, filename) {
@@ -233,7 +271,7 @@ app.post("/api/invites", requireAdmin, (req, res) => {
 
   const inviteId = randomId(12);
   const inviteSecret = randomId(24);
-  const room = `room_${randomId(18)}`; // unguessable room name
+  const room = DEFAULT_ROOM_NAME;
 
   const exp = nowSec() + ttlSeconds;
   invites.set(inviteId, {
@@ -255,13 +293,13 @@ app.post("/api/invites", requireAdmin, (req, res) => {
 /**
  * CLIENT: exchange invite for LiveKit token
  * POST /api/connection-details
- * body: { inviteId, key, name? }
+ * body: { inviteId, key, name?, identity? }
  *
  * returns: { url, token, room, identity, role }
  */
 app.post("/api/connection-details", async (req, res) => {
   try {
-    const { inviteId, key, name } = req.body || {};
+    const { inviteId, key, name, identity: requestedIdentity } = req.body || {};
     if (!inviteId || !key) return res.status(400).json({ error: "missing inviteId/key" });
 
     const inv = invites.get(inviteId);
@@ -279,11 +317,21 @@ app.post("/api/connection-details", async (req, res) => {
 
     inv.uses += 1;
 
-    const identity = `p_${randomId(10)}`;
+    const requested = sanitizeIdentity(requestedIdentity);
+    if (requested) {
+      try {
+        await roomService.removeParticipant(inv.room, requested);
+      } catch (err) {
+        console.warn("reclaim identity removeParticipant error:", err.message || err);
+      }
+    }
+
+    const identity = requested || `p_${randomId(10)}`;
+    const displayName = typeof name === "string" && name.trim() ? name.trim().slice(0, 48) : undefined;
 
     const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
       identity,
-      name: typeof name === "string" && name.trim() ? name.trim().slice(0, 48) : undefined,
+      name: displayName,
       ttl: 60 * 15,
     });
 
@@ -297,6 +345,23 @@ app.post("/api/connection-details", async (req, res) => {
 
     const token = await at.toJwt(); // ✅ IMPORTANT
 
+    identitySessions.set(identity, { inviteId, room: inv.room, name: displayName });
+
+    try {
+      await delayServiceRequest("/delay", {
+        method: "POST",
+        body: JSON.stringify({
+          room: inv.room,
+          participant: identity,
+          delayMs: 0,
+          keepAlive: true,
+          participantName: displayName,
+        }),
+      });
+    } catch (err) {
+      console.warn("delay keepAlive error:", err.message || err);
+    }
+
     res.json({
       url: LIVEKIT_URL,          // http(s)
       wsUrl: toWsUrl(LIVEKIT_URL),
@@ -308,6 +373,56 @@ app.post("/api/connection-details", async (req, res) => {
 
   } catch (err) {
     console.error("connection-details error:", err);
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+/**
+ * CLIENT: leave session and remove relay placeholder
+ * POST /api/leave
+ * body: { inviteId, key, identity }
+ */
+app.post("/api/leave", async (req, res) => {
+  try {
+    const { inviteId, key, identity } = req.body || {};
+    if (!inviteId || !key || !identity) {
+      return res.status(400).json({ error: "missing inviteId/key/identity" });
+    }
+
+    const inv = invites.get(inviteId);
+    if (!inv) return res.status(404).json({ error: "invalid invite" });
+
+    if (inv.exp <= nowSec()) {
+      invites.delete(inviteId);
+      return res.status(410).json({ error: "invite expired" });
+    }
+
+    if (sha256(key) !== inv.secretHash) return res.status(403).json({ error: "invalid key" });
+
+    const session = identitySessions.get(identity);
+    if (!session || session.inviteId !== inviteId) {
+      return res.status(403).json({ error: "unauthorized" });
+    }
+
+    try {
+      await roomService.removeParticipant(inv.room, identity);
+    } catch (err) {
+      console.warn("leave removeParticipant error:", err.message || err);
+    }
+
+    try {
+      await delayServiceRequest("/delay/remove", {
+        method: "POST",
+        body: JSON.stringify({ room: inv.room, participant: identity }),
+      });
+    } catch (err) {
+      console.warn("leave delay remove error:", err.message || err);
+    }
+
+    identitySessions.delete(identity);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("leave error:", err);
     res.status(500).json({ error: "internal_error" });
   }
 });
@@ -652,9 +767,16 @@ app.post("/api/admin/stream-delay", requireAdmin, async (req, res) => {
       return res.status(400).json({ error: "delayMs must be between 0 and 10000" });
     }
 
+    const session = identitySessions.get(participant);
     const payload = await delayServiceRequest("/delay", {
       method: "POST",
-      body: JSON.stringify({ room, participant, delayMs: delay }),
+      body: JSON.stringify({
+        room,
+        participant,
+        delayMs: delay,
+        keepAlive: true,
+        participantName: session?.name,
+      }),
     });
 
     console.log(`Stream delay set for ${participant} in room ${room}: ${delay}ms`);
@@ -687,6 +809,40 @@ app.get("/api/admin/stream-delay/status", requireAdmin, async (req, res) => {
 });
 
 /**
+ * ADMIN: Service health
+ * GET /api/admin/health
+ * headers: { x-admin-key: ADMIN_KEY }
+ */
+app.get("/api/admin/health", requireAdmin, async (_req, res) => {
+  const health = {
+    delayService: { ok: false, error: null, ms: null },
+    livekit: { ok: false, error: null },
+  };
+
+  const start = Date.now();
+  try {
+    const r = await fetchWithTimeout(`${DELAY_SERVICE_URL}/healthz`, {}, 3000);
+    health.delayService.ok = r.ok;
+    if (!r.ok) {
+      health.delayService.error = `status ${r.status}`;
+    }
+  } catch (err) {
+    health.delayService.error = err?.message || String(err);
+  } finally {
+    health.delayService.ms = Date.now() - start;
+  }
+
+  try {
+    await roomService.listRooms();
+    health.livekit.ok = true;
+  } catch (err) {
+    health.livekit.error = err?.message || String(err);
+  }
+
+  res.json(health);
+});
+
+/**
  * ADMIN: Get rooms and their participants
  * GET /api/admin/rooms
  * headers: { x-admin-key: ADMIN_KEY }
@@ -695,23 +851,53 @@ app.get("/api/admin/stream-delay/status", requireAdmin, async (req, res) => {
  */
 app.get("/api/admin/rooms", requireAdmin, async (req, res) => {
   try {
-    const rooms = await roomService.listRooms();
+    let rooms = [];
+    try {
+      rooms = await roomService.listRooms();
+    } catch (err) {
+      console.warn("admin/rooms listRooms failed:", err.message || err);
+      rooms = [];
+    }
+    const roomMap = new Map(rooms.map((room) => [room.name, room]));
+
+    const sessionCounts = new Map();
+    for (const [identity, session] of identitySessions.entries()) {
+      if (!session?.room) continue;
+      if (!sessionCounts.has(session.room)) {
+        sessionCounts.set(session.room, new Set());
+      }
+      sessionCounts.get(session.room).add(identity);
+    }
+
+    const allRoomNames = new Set([
+      ...roomMap.keys(),
+      ...sessionCounts.keys(),
+      DEFAULT_ROOM_NAME,
+    ]);
+
     const detailed = await Promise.all(
-      rooms.map(async (room) => {
+      Array.from(allRoomNames).map(async (roomName) => {
+        const room = roomMap.get(roomName);
         let realParticipantCount = 0;
         try {
-          const participants = await roomService.listParticipants(room.name);
+          const participants = await roomService.listParticipants(roomName);
           realParticipantCount = participants.filter((p) =>
             isRecordableParticipant(p.identity)
           ).length;
         } catch (err) {
           console.warn("admin/rooms listParticipants failed:", err.message || err);
         }
+
+        const sessionCount = sessionCounts.get(roomName)?.size || 0;
+        const logicalCount = Math.max(realParticipantCount, sessionCount);
+
         return {
-          name: room.name,
-          participantCount: room.numParticipants,
-          realParticipantCount,
-          createdAt: new Date(Number(room.creationTime) * 1000).toISOString(),
+          name: roomName,
+          participantCount: room?.numParticipants ?? sessionCount,
+          realParticipantCount: logicalCount,
+          createdAt: room?.creationTime
+            ? new Date(Number(room.creationTime) * 1000).toISOString()
+            : null,
         };
       })
     );
@@ -725,6 +911,17 @@ app.get("/api/admin/rooms", requireAdmin, async (req, res) => {
 });
 
 /**
+ * ADMIN: Get the single active room name
+ * GET /api/admin/room
+ * headers: { x-admin-key: ADMIN_KEY }
+ *
+ * returns: { room }
+ */
+app.get("/api/admin/room", requireAdmin, async (_req, res) => {
+  res.json({ room: DEFAULT_ROOM_NAME });
+});
+
+/**
  * ADMIN: Get participants in a room
  * GET /api/admin/rooms/:roomName/participants
  * headers: { x-admin-key: ADMIN_KEY }
@@ -734,12 +931,25 @@ app.get("/api/admin/rooms", requireAdmin, async (req, res) => {
 app.get("/api/admin/rooms/:roomName/participants", requireAdmin, async (req, res) => {
   try {
     const { roomName } = req.params;
-    const participants = await roomService.listParticipants(roomName);
+    let participants = [];
+    try {
+      participants = await roomService.listParticipants(roomName);
+    } catch (err) {
+      const message = err?.message || "";
+      const notFound = err?.code === 404 || /not found/i.test(message);
+      if (!notFound) {
+        throw err;
+      }
+      participants = [];
+    }
+    const byIdentity = new Map(participants.map((p) => [p.identity, p]));
 
     const formatted = participants.map((p) => ({
       identity: p.identity,
       name: p.name,
       state: p.state,
+      present: true,
+      placeholder: false,
       tracks: p.tracks.map((t) => ({
         type: t.type,
         sid: t.sid,
@@ -747,9 +957,57 @@ app.get("/api/admin/rooms/:roomName/participants", requireAdmin, async (req, res
       })),
     }));
 
+    for (const [identity, session] of identitySessions.entries()) {
+      if (session.room !== roomName) continue;
+      if (byIdentity.has(identity)) continue;
+      formatted.push({
+        identity,
+        name: session.name,
+        state: "offline",
+        present: false,
+        placeholder: true,
+        tracks: [],
+      });
+    }
+
     res.json({ room: roomName, participants: formatted });
   } catch (err) {
     console.error("admin/participants error:", err.message, err);
+    res.status(500).json({ error: err.message || "internal_error" });
+  }
+});
+
+/**
+ * ADMIN: Remove participant from a room
+ * POST /api/admin/rooms/:roomName/participants/:identity/remove
+ * headers: { x-admin-key: ADMIN_KEY }
+ */
+app.post("/api/admin/rooms/:roomName/participants/:identity/remove", requireAdmin, async (req, res) => {
+  try {
+    const { roomName, identity } = req.params;
+    if (!roomName || !identity) {
+      return res.status(400).json({ error: "missing room or identity" });
+    }
+
+    try {
+      await roomService.removeParticipant(roomName, identity);
+    } catch (err) {
+      console.warn("admin/removeParticipant error:", err.message || err);
+    }
+
+    try {
+      await delayServiceRequest("/delay/remove", {
+        method: "POST",
+        body: JSON.stringify({ room: roomName, participant: identity }),
+      });
+    } catch (err) {
+      console.warn("admin/delay remove error:", err.message || err);
+    }
+
+    identitySessions.delete(identity);
+    res.json({ success: true, room: roomName, identity });
+  } catch (err) {
+    console.error("admin/removeParticipant error:", err.message || err);
     res.status(500).json({ error: err.message || "internal_error" });
   }
 });

@@ -36,16 +36,45 @@ function makeAdminRequest(endpoint, options = {}) {
     .finally(() => clearTimeout(timeoutId));
 }
 
+async function parseResponse(r, label) {
+  const text = await r.text().catch(() => "");
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  }
+  if (!r.ok) {
+    const detail = data?.error || text;
+    const suffix = detail ? ` - ${detail}` : "";
+    throw new Error(`${label} failed: ${r.status}${suffix}`);
+  }
+  return data ?? {};
+}
+
 export async function getRooms() {
   const r = await makeAdminRequest("/api/admin/rooms");
-  if (!r.ok) throw new Error(`getRooms failed: ${r.status}`);
-  return r.json();
+  return parseResponse(r, "getRooms");
+}
+
+export async function getRoom() {
+  const r = await makeAdminRequest("/api/admin/room");
+  return parseResponse(r, "getRoom");
 }
 
 export async function getParticipants(roomName) {
   const r = await makeAdminRequest(`/api/admin/rooms/${encodeURIComponent(roomName)}/participants`);
-  if (!r.ok) throw new Error(`getParticipants failed: ${r.status}`);
-  return r.json();
+  return parseResponse(r, "getParticipants");
+}
+
+export async function removeParticipant(roomName, identity) {
+  const r = await makeAdminRequest(
+    `/api/admin/rooms/${encodeURIComponent(roomName)}/participants/${encodeURIComponent(identity)}/remove`,
+    { method: "POST" }
+  );
+  return parseResponse(r, "removeParticipant");
 }
 
 export async function startRecording(room, mode) {
@@ -53,8 +82,7 @@ export async function startRecording(room, mode) {
     method: "POST",
     body: JSON.stringify({ room, mode }),
   });
-  if (!r.ok) throw new Error(`startRecording failed: ${r.status}`);
-  return r.json();
+  return parseResponse(r, "startRecording");
 }
 
 export async function stopRecording(room, mode) {
@@ -62,14 +90,12 @@ export async function stopRecording(room, mode) {
     method: "POST",
     body: JSON.stringify({ room, mode: mode || "all" }),
   });
-  if (!r.ok) throw new Error(`stopRecording failed: ${r.status}`);
-  return r.json();
+  return parseResponse(r, "stopRecording");
 }
 
 export async function getRecordingStatus(room) {
   const r = await makeAdminRequest(`/api/admin/recording/status?room=${encodeURIComponent(room)}`);
-  if (!r.ok) throw new Error(`getRecordingStatus failed: ${r.status}`);
-  return r.json();
+  return parseResponse(r, "getRecordingStatus");
 }
 
 export async function setStreamDelay(room, participant, delayMs) {
@@ -77,14 +103,12 @@ export async function setStreamDelay(room, participant, delayMs) {
     method: "POST",
     body: JSON.stringify({ room, participant, delayMs }),
   });
-  if (!r.ok) throw new Error(`setStreamDelay failed: ${r.status}`);
-  return r.json();
+  return parseResponse(r, "setStreamDelay");
 }
 
 export async function getStreamDelayStatus(room) {
   const r = await makeAdminRequest(`/api/admin/stream-delay/status?room=${encodeURIComponent(room)}`);
-  if (!r.ok) throw new Error(`getStreamDelayStatus failed: ${r.status}`);
-  return r.json();
+  return parseResponse(r, "getStreamDelayStatus");
 }
 
 export async function getPreviewToken(room) {
@@ -92,6 +116,10 @@ export async function getPreviewToken(room) {
     method: "POST",
     body: JSON.stringify({ room }),
   });
-  if (!r.ok) throw new Error(`getPreviewToken failed: ${r.status}`);
-  return r.json();
+  return parseResponse(r, "getPreviewToken");
+}
+
+export async function getHealth() {
+  const r = await makeAdminRequest("/api/admin/health");
+  return parseResponse(r, "getHealth");
 }
