@@ -203,6 +203,50 @@ function isRecordableParticipant(identity) {
   return identity.startsWith("p_");
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function listEgressParticipants(room) {
+  const participants = await roomService.listParticipants(room);
+  return participants.filter((p) => p.identity?.startsWith("EG_"));
+}
+
+async function tagEgressParticipant(room, identity, mode) {
+  try {
+    const info = await roomService.getParticipant(room, identity);
+    const attributes = { ...(info?.attributes || {}), egressMode: mode };
+    let metadata = typeof info?.metadata === "string" ? info.metadata : "";
+    if (!metadata.includes("egressMode=")) {
+      metadata = metadata ? `${metadata};egressMode=${mode}` : `egressMode=${mode}`;
+    }
+    await roomService.updateParticipant(room, identity, { attributes, metadata });
+  } catch (err) {
+    console.warn(`egress tag failed (${identity}, ${mode}):`, err.message || err);
+  }
+}
+
+async function tagNewEgressParticipants(room, mode, beforeSet, expectedCount = 1) {
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    try {
+      const participants = await listEgressParticipants(room);
+      const newOnes = participants.filter((p) => !beforeSet.has(p.identity));
+      if (newOnes.length >= expectedCount) {
+        for (const p of newOnes) {
+          await tagEgressParticipant(room, p.identity, mode);
+        }
+        return newOnes.map((p) => p.identity);
+      }
+    } catch (err) {
+      console.warn("egress tag polling failed:", err.message || err);
+    }
+    await sleep(200);
+  }
+  console.warn(`egress tag timeout: no ${mode} participant detected`);
+  return [];
+}
+
 async function startParticipantEgress(room, recordingBase, participantIdentity, participantName) {
   const safeName = sanitizeFilePart(participantName || participantIdentity);
   const egressFilepath = egressPathFor(
@@ -528,6 +572,10 @@ app.post("/api/admin/recording/start", requireAdmin, async (req, res) => {
       // and should map to the host + token-service via volume mounts.
       const egressFilepath = egressPathFor(room, `${recordingId}_ROOM.mp4`);
 
+      const egressBefore = new Set(
+        (await listEgressParticipants(room)).map((p) => p.identity)
+      );
+
       const fileOutput = new EncodedFileOutput({
         filepath: egressFilepath,
         fileType: EncodedFileType.MP4,
@@ -547,6 +595,7 @@ app.post("/api/admin/recording/start", requireAdmin, async (req, res) => {
         throw new Error("egress did not return an egressId");
       }
       egressIds.push(egressId);
+      await tagNewEgressParticipants(room, "composite", egressBefore, 1);
 
     } else if (mode === "individual") {
       // Record each participant separately using Participant Egress
@@ -559,10 +608,14 @@ app.post("/api/admin/recording/start", requireAdmin, async (req, res) => {
       participantSet = new Set();
 
       for (const p of recordable) {
+        const egressBefore = new Set(
+          (await listEgressParticipants(room)).map((p) => p.identity)
+        );
         const egressId = await startParticipantEgress(room, recordingId, p.identity, p.name);
         if (egressId) {
           egressIds.push(egressId);
           participantSet.add(p.identity);
+          await tagNewEgressParticipants(room, "individual", egressBefore, 1);
         }
       }
 
@@ -580,6 +633,9 @@ app.post("/api/admin/recording/start", requireAdmin, async (req, res) => {
           for (const p of current) {
             if (!isRecordableParticipant(p.identity)) continue;
             if (!state.participants.has(p.identity)) {
+              const egressBefore = new Set(
+                (await listEgressParticipants(room)).map((p) => p.identity)
+              );
               const egressId = await startParticipantEgress(
                 room,
                 state.recordingId,
@@ -589,6 +645,7 @@ app.post("/api/admin/recording/start", requireAdmin, async (req, res) => {
               if (egressId) {
                 state.egressIds.push(egressId);
                 state.participants.add(p.identity);
+                await tagNewEgressParticipants(room, "individual", egressBefore, 1);
               }
             }
           }

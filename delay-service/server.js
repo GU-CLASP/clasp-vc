@@ -66,11 +66,29 @@ function relayIdentityFor(participant) {
   return `relay_${participant}`;
 }
 
-function isSubscriberParticipant(identity, sourceIdentity) {
+function parseEgressMode(participantInfo) {
+  if (!participantInfo) return null;
+  const attrs = participantInfo.attributes || {};
+  if (attrs.egressMode) return String(attrs.egressMode);
+  const metadata = participantInfo.metadata;
+  if (typeof metadata === "string") {
+    const match = metadata.match(/(?:^|;)\s*egressMode=([a-z]+)/i);
+    if (match) return match[1].toLowerCase();
+  }
+  return null;
+}
+
+function isSubscriberParticipant(participantInfo, sourceIdentity) {
+  const identity = participantInfo?.identity || participantInfo;
   if (!identity) return false;
   if (identity === sourceIdentity) return false;
   if (identity.startsWith("relay_")) return false;
-  if (identity.startsWith("EG_")) return false;
+  if (identity.startsWith("EG_")) {
+    const mode = parseEgressMode(participantInfo);
+    if (mode === "individual") return false;
+    if (mode === "composite") return true;
+    return false;
+  }
   return true;
 }
 
@@ -359,7 +377,12 @@ class DelayRelay {
       .on(RoomEvent.ParticipantConnected, async (participant) => {
         if (!this.running) return;
         if (participant.identity === this.participant) return;
-        if (participant.identity.startsWith("relay_")) return;
+        const info = {
+          identity: participant.identity,
+          attributes: participant.attributes,
+          metadata: participant.metadata,
+        };
+        if (!isSubscriberParticipant(info, this.participant)) return;
         if (this.trackSids.size === 0) return;
         try {
           await this.roomService.updateSubscriptions(
@@ -370,6 +393,27 @@ class DelayRelay {
           );
         } catch (err) {
           console.warn("updateSubscriptions (join) failed:", err.message || err);
+        }
+      })
+      .on(RoomEvent.ParticipantAttributesChanged, async (_changed, participant) => {
+        if (!this.running) return;
+        if (participant.identity === this.participant) return;
+        if (this.trackSids.size === 0) return;
+        const info = {
+          identity: participant.identity,
+          attributes: participant.attributes,
+          metadata: participant.metadata,
+        };
+        const shouldUnsubscribe = this.delayMs > 0 && isSubscriberParticipant(info, this.participant);
+        try {
+          await this.roomService.updateSubscriptions(
+            this.roomName,
+            participant.identity,
+            Array.from(this.trackSids),
+            !shouldUnsubscribe
+          );
+        } catch (err) {
+          console.warn("updateSubscriptions (attrs) failed:", err.message || err);
         }
       })
       .on(RoomEvent.TrackPublished, async (_pub, participant) => {
@@ -428,7 +472,7 @@ class DelayRelay {
       const trackSids = Array.from(this.trackSids);
 
       for (const p of participants) {
-        if (!isSubscriberParticipant(p.identity, this.participant)) continue;
+        if (!isSubscriberParticipant(p, this.participant)) continue;
         try {
           await this.roomService.updateSubscriptions(
             this.roomName,
@@ -452,7 +496,7 @@ class DelayRelay {
       const trackSids = Array.from(this.trackSids);
 
       for (const p of participants) {
-        if (!isSubscriberParticipant(p.identity, this.participant)) continue;
+        if (!isSubscriberParticipant(p, this.participant)) continue;
         try {
           await this.roomService.updateSubscriptions(
             this.roomName,
