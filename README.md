@@ -18,6 +18,8 @@ The recorded files are stored in `./data/recordings`.
 
 ### Development (Localhost)
 
+*You need to have [podman](https://podman.io/docs/installation) installed in order to use the script 'clasp-vc'*
+
 1. Copy `.env.example` to `.env` and set at least `ADMIN_KEY` and `PUBLIC_BASE_URL`.
 2. For local development, use localhost values like:
    `PUBLIC_BASE_URL=http://127.0.0.1:5173`
