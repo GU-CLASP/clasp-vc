@@ -54,11 +54,6 @@ async function parseResponse(r, label) {
   return data ?? {};
 }
 
-export async function getRooms() {
-  const r = await makeAdminRequest("/api/admin/rooms");
-  return parseResponse(r, "getRooms");
-}
-
 export async function getRoom() {
   const r = await makeAdminRequest("/api/admin/room");
   return parseResponse(r, "getRoom");

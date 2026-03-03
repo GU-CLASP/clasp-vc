@@ -1,9 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Room,
   RoomEvent,
@@ -46,7 +41,6 @@ function parseRecordingParams() {
   return {
     url: params.get("url"),
     token: params.get("token"),
-    layout: params.get("layout"),
   };
 }
 

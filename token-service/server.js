@@ -1242,11 +1242,3 @@ app.post("/api/admin/preview-token", requireAdmin, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`token-service listening on http://127.0.0.1:${PORT}`);
 });
-
-function publicBaseUrl() {
-  // If you’re serving the web app on the same domain as LIVEKIT_URL,
-  // you can derive HTTPS base from it.
-  // LIVEKIT_URL example: wss://meet.example.org
-  const u = new URL(LIVEKIT_URL.replace(/^wss:/, "https:").replace(/^ws:/, "http:"));
-  return u.origin;
-}
