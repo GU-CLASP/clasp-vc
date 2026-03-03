@@ -131,8 +131,8 @@ function buildParticipantList(room) {
     if (p.identity.startsWith("admin_") || p.identity.startsWith("EG_")) {
       continue;
     }
-    if (p.identity.startsWith("relay_")) {
-      const originalId = p.identity.slice("relay_".length);
+    if (p.identity.startsWith("fx_")) {
+      const originalId = p.identity.slice("fx_".length);
       relays.set(originalId, p);
     } else {
       originals.set(p.identity, p);
@@ -158,7 +158,7 @@ function buildParticipantList(room) {
     if (shouldUseRelay) {
       usedRelays.add(id);
       list.push({
-        key: `relay:${relay.identity}`,
+        key: `fx:${relay.identity}`,
         participant: relay,
         displayName: original.name || original.identity,
         displayIdentity: original.identity,
@@ -178,7 +178,7 @@ function buildParticipantList(room) {
     if (originals.has(id) || usedRelays.has(id)) continue;
     if (id === local.identity) continue;
     list.push({
-      key: `relay:${relay.identity}`,
+      key: `fx:${relay.identity}`,
       participant: relay,
       displayName: relay.name || id,
       displayIdentity: id,
@@ -197,8 +197,8 @@ function buildRecordingParticipantList(room) {
     if (p.identity.startsWith("admin_") || p.identity.startsWith("EG_")) {
       continue;
     }
-    if (p.identity.startsWith("relay_")) {
-      const originalId = p.identity.slice("relay_".length);
+    if (p.identity.startsWith("fx_")) {
+      const originalId = p.identity.slice("fx_".length);
       relays.set(originalId, p);
     } else {
       originals.set(p.identity, p);
@@ -217,7 +217,7 @@ function buildRecordingParticipantList(room) {
     if (shouldUseRelay) {
       usedRelays.add(id);
       list.push({
-        key: `relay:${relay.identity}`,
+        key: `fx:${relay.identity}`,
         participant: relay,
         displayName: original.name || original.identity,
         displayIdentity: original.identity,
@@ -236,7 +236,7 @@ function buildRecordingParticipantList(room) {
   for (const [id, relay] of relays.entries()) {
     if (originals.has(id) || usedRelays.has(id)) continue;
     list.push({
-      key: `relay:${relay.identity}`,
+      key: `fx:${relay.identity}`,
       participant: relay,
       displayName: relay.name || id,
       displayIdentity: id,

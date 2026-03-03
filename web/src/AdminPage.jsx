@@ -7,8 +7,8 @@ import {
   startRecording,
   stopRecording,
   getRecordingStatus,
-  setStreamDelay,
-  getStreamDelayStatus,
+  setDelayEffect,
+  getDelayEffectStatus,
   getPreviewToken,
   getHealth,
 } from "./adminApi.js";
@@ -17,7 +17,7 @@ export default function AdminPage() {
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [recordingStatus, setRecordingStatus] = useState({});
-  const [streamDelays, setStreamDelays] = useState({});
+  const [delayEffects, setDelayEffects] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [errorLog, setErrorLog] = useState([]);
@@ -54,11 +54,11 @@ export default function AdminPage() {
     if (selectedRoom) {
       refreshParticipants();
       refreshRecordingStatus();
-      refreshStreamDelays();
+      refreshDelayEffects();
       const interval = setInterval(() => {
         refreshParticipants();
         refreshRecordingStatus();
-        refreshStreamDelays();
+        refreshDelayEffects();
       }, 2000);
       return () => clearInterval(interval);
     }
@@ -183,14 +183,14 @@ export default function AdminPage() {
     }
   }
 
-  async function refreshStreamDelays() {
+  async function refreshDelayEffects() {
     if (!selectedRoom) return;
     if (serverOfflineRef.current) return;
     try {
-      const data = await getStreamDelayStatus(selectedRoom);
-      setStreamDelays(data.delays || {});
+      const data = await getDelayEffectStatus(selectedRoom);
+      setDelayEffects(data.delays || {});
     } catch (e) {
-      if (!serverOffline) appendError(`stream delay status failed: ${e?.message || e}`);
+      if (!serverOffline) appendError(`delay effect status failed: ${e?.message || e}`);
     }
   }
 
@@ -202,10 +202,10 @@ export default function AdminPage() {
     }
     setLoading(true);
     try {
-      await setStreamDelay(selectedRoom, participant, delayMs);
+      await setDelayEffect(selectedRoom, participant, delayMs);
       setSuccess(`Delay set for ${participant}: ${delayMs}ms`);
       setTimeout(() => setSuccess(""), 3000);
-      refreshStreamDelays();
+      refreshDelayEffects();
     } catch (e) {
       appendError(`set delay failed: ${e?.message || e}`);
     } finally {
@@ -225,7 +225,7 @@ export default function AdminPage() {
       setSuccess(`Removed ${identity}`);
       setTimeout(() => setSuccess(""), 3000);
       refreshParticipants();
-      refreshStreamDelays();
+      refreshDelayEffects();
     } catch (e) {
       appendError(`remove participant failed: ${e?.message || e}`);
     } finally {
@@ -286,12 +286,12 @@ export default function AdminPage() {
             </span>
           ) : null}
           <span style={{ marginRight: 12 }}>
-            delay-service:{" "}
-            <span style={{ color: serviceHealth?.delayService?.ok ? "green" : "crimson" }}>
-              {serviceHealth?.delayService?.ok ? "up" : "down"}
+            effects-service:{" "}
+            <span style={{ color: serviceHealth?.effectsService?.ok ? "green" : "crimson" }}>
+              {serviceHealth?.effectsService?.ok ? "up" : "down"}
             </span>
-            {serviceHealth?.delayService?.ms != null ? ` (${serviceHealth.delayService.ms}ms)` : ""}
-            {serviceHealth?.delayService?.error ? ` - ${serviceHealth.delayService.error}` : ""}
+            {serviceHealth?.effectsService?.ms != null ? ` (${serviceHealth.effectsService.ms}ms)` : ""}
+            {serviceHealth?.effectsService?.error ? ` - ${serviceHealth.effectsService.error}` : ""}
           </span>
           <span>
             livekit:{" "}
@@ -346,7 +346,7 @@ export default function AdminPage() {
               </button>
             </div>
 
-            {/* Stream Delay Controls */}
+            {/* Delay Effect Controls */}
             <div
               style={{
                 border: "1px solid #ddd",
@@ -355,7 +355,7 @@ export default function AdminPage() {
                 backgroundColor: "#f9f9f9",
               }}
             >
-              <h3>Stream Delay Controls</h3>
+              <h3>Delay Effect Controls</h3>
               <p style={{ opacity: 0.7, fontSize: 13, marginBottom: 16 }}>
                 Add delay to participants' streams (other participants will experience the delay).
               </p>
@@ -386,7 +386,7 @@ export default function AdminPage() {
                         min="0"
                         max="10000"
                         step="100"
-                        value={delayValues[participant.identity] ?? streamDelays[participant.identity] ?? 0}
+                        value={delayValues[participant.identity] ?? delayEffects[participant.identity] ?? 0}
                         onChange={(e) =>
                           setDelayValues({
                             ...delayValues,
@@ -406,7 +406,7 @@ export default function AdminPage() {
                         onClick={() =>
                           handleSetDelay(
                             participant.identity,
-                            delayValues[participant.identity] ?? streamDelays[participant.identity] ?? 0
+                            delayValues[participant.identity] ?? delayEffects[participant.identity] ?? 0
                           )
                         }
                         disabled={loading}
@@ -460,7 +460,7 @@ export default function AdminPage() {
             {previewConn ? (
               <CompositePreview
                 conn={previewConn}
-                streamDelays={streamDelays}
+                delayEffects={delayEffects}
                 onDisconnect={() => {
                   setPreviewConn(null);
                   setPreviewError("Preview disconnected, retrying...");
@@ -547,7 +547,7 @@ export default function AdminPage() {
 
 function isPreviewableIdentity(identity) {
   if (!identity) return false;
-  if (identity.startsWith("relay_")) return true;
+  if (identity.startsWith("fx_")) return true;
   if (identity.startsWith("p_")) return true;
   return false;
 }
@@ -562,15 +562,15 @@ function hasSubscribedVideo(participant) {
   return false;
 }
 
-function buildPreviewParticipants(room, streamDelays) {
+function buildPreviewParticipants(room, delayEffects) {
   const remotes = Array.from(room.remoteParticipants.values());
   const relays = new Map();
   const originals = new Map();
 
   for (const p of remotes) {
     if (!isPreviewableIdentity(p.identity)) continue;
-    if (p.identity.startsWith("relay_")) {
-      const originalId = p.identity.slice("relay_".length);
+    if (p.identity.startsWith("fx_")) {
+      const originalId = p.identity.slice("fx_".length);
       relays.set(originalId, p);
     } else {
       originals.set(p.identity, p);
@@ -583,13 +583,13 @@ function buildPreviewParticipants(room, streamDelays) {
   for (const [id, original] of originals.entries()) {
     const relay = relays.get(id);
     const originalHasVideo = hasSubscribedVideo(original);
-    const hasDelay = Number(streamDelays?.[id] || 0) > 0;
+    const hasDelay = Number(delayEffects?.[id] || 0) > 0;
     const shouldUseRelay = relay && (hasDelay || !originalHasVideo);
 
     if (shouldUseRelay) {
       usedRelays.add(id);
       list.push({
-        key: `relay:${relay.identity}`,
+        key: `fx:${relay.identity}`,
         participant: relay,
         displayName: original.name || original.identity,
         displayIdentity: original.identity,
@@ -608,7 +608,7 @@ function buildPreviewParticipants(room, streamDelays) {
   for (const [id, relay] of relays.entries()) {
     if (originals.has(id) || usedRelays.has(id)) continue;
     list.push({
-      key: `relay:${relay.identity}`,
+      key: `fx:${relay.identity}`,
       participant: relay,
       displayName: relay.name || id,
       displayIdentity: id,
@@ -626,7 +626,7 @@ function attachTrack(el, track) {
   return attachedEl;
 }
 
-function CompositePreview({ conn, streamDelays, onDisconnect }) {
+function CompositePreview({ conn, delayEffects, onDisconnect }) {
   const roomRef = useRef(null);
   const [, bump] = useState(0);
 
@@ -671,7 +671,7 @@ function CompositePreview({ conn, streamDelays, onDisconnect }) {
   }, [conn?.url, conn?.token]);
 
   const room = roomRef.current;
-  const participants = room ? buildPreviewParticipants(room, streamDelays) : [];
+  const participants = room ? buildPreviewParticipants(room, delayEffects) : [];
 
   return (
     <div

@@ -39,6 +39,8 @@ services:
   token-service:
     image: docker.io/node:20-alpine
     network_mode: "host"
+    depends_on:
+      - effects-service
     working_dir: /app
     volumes:
       - ./token-service:/app:Z
@@ -56,7 +58,7 @@ services:
       - INVITE_MAX_USES=${INVITE_MAX_USES:-0}
       - RECORDINGS_DIR=/app/recordings
       - EGRESS_FILE_BASE=/out/recordings
-      - DELAY_SERVICE_URL=http://127.0.0.1:9100
+      - EFFECTS_SERVICE_URL=http://127.0.0.1:9100
 
   web:
     depends_on:
@@ -77,12 +79,12 @@ services:
       - VITE_BASE_PATH=${VITE_BASE_PATH}
       - VITE_ALLOWED_HOSTS=${VITE_ALLOWED_HOSTS}
 
-  delay-service:
+  effects-service:
     image: docker.io/node:20-bullseye
     network_mode: "host"
     working_dir: /app
     volumes:
-      - ./delay-service:/app:Z
+      - ./effects-service:/app:Z
     command: >
       sh -lc "apt-get update && apt-get install -y libpulse0 &&
       npm install && node server.js"

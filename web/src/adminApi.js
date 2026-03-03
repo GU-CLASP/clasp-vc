@@ -93,17 +93,17 @@ export async function getRecordingStatus(room) {
   return parseResponse(r, "getRecordingStatus");
 }
 
-export async function setStreamDelay(room, participant, delayMs) {
-  const r = await makeAdminRequest("/api/admin/stream-delay", {
+export async function setDelayEffect(room, participant, delayMs) {
+  const r = await makeAdminRequest("/api/admin/effects/delay", {
     method: "POST",
     body: JSON.stringify({ room, participant, delayMs }),
   });
-  return parseResponse(r, "setStreamDelay");
+  return parseResponse(r, "setDelayEffect");
 }
 
-export async function getStreamDelayStatus(room) {
-  const r = await makeAdminRequest(`/api/admin/stream-delay/status?room=${encodeURIComponent(room)}`);
-  return parseResponse(r, "getStreamDelayStatus");
+export async function getDelayEffectStatus(room) {
+  const r = await makeAdminRequest(`/api/admin/effects/delay/status?room=${encodeURIComponent(room)}`);
+  return parseResponse(r, "getDelayEffectStatus");
 }
 
 export async function getPreviewToken(room) {
