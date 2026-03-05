@@ -27,7 +27,7 @@ services:
     volumes:
       - ./egress-config.yaml:/out/config.yaml:Z
       # shared recordings directory on the host, so you can access files easily
-      - ./data/recordings:/out/recordings:Z
+      - ./data/recordings:/out/recordings:z
     environment:
       # tell egress where the config file is
       - EGRESS_CONFIG_FILE=/out/config.yaml
@@ -44,7 +44,7 @@ services:
     working_dir: /app
     volumes:
       - ./token-service:/app:Z
-      - ./data/recordings:/app/recordings:Z
+      - ./data/recordings:/app/recordings:z
     command: ["sh", "-lc", "npm install && node server.js"]
     environment:
       - PORT=9000
