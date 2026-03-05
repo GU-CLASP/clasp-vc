@@ -547,7 +547,8 @@ class DelayEffectSession {
     if (this.videoCaptureFailed) return;
     const source = this.videoSource;
     if (!source) return;
-    source.captureFrame(frame).catch((err) => this._handleCaptureError("video", err));
+    // VideoSource.captureFrame returns void, unlike AudioSource.captureFrame which returns a promise.
+    source.captureFrame(frame);
   }
 
   async _startAudioEffect(track) {
