@@ -4,6 +4,7 @@ import {
   getRoom,
   getParticipants,
   removeParticipant,
+  setParticipantSelfVisibility,
   startRecording,
   stopRecording,
   getRecordingStatus,
@@ -233,6 +234,27 @@ export default function AdminPage() {
     }
   }
 
+  async function handleSetSelfVisibility(participant, showSelf) {
+    if (!selectedRoom) return;
+    if (serverOffline) {
+      appendError("self visibility update failed: server appears offline");
+      return;
+    }
+    setLoading(true);
+    try {
+      await setParticipantSelfVisibility(selectedRoom, participant, showSelf);
+      setParticipants((prev) =>
+        prev.map((p) => (p.identity === participant ? { ...p, showSelf } : p))
+      );
+      setSuccess(`${participant} ${showSelf ? "can now see self" : "will no longer see self"}`);
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (e) {
+      appendError(`self visibility update failed: ${e?.message || e}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleToggleRecording() {
     if (!selectedRoom) return;
     if (serverOffline) {
@@ -422,6 +444,17 @@ export default function AdminPage() {
                       >
                         Apply
                       </button>
+                      <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+                        <input
+                          type="checkbox"
+                          checked={participant.showSelf !== false}
+                          disabled={loading}
+                          onChange={(e) =>
+                            handleSetSelfVisibility(participant.identity, e.target.checked)
+                          }
+                        />
+                        See self
+                      </label>
                       <button
                         onClick={() => handleRemoveParticipant(participant.identity)}
                         disabled={loading}

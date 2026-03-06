@@ -72,6 +72,17 @@ export async function removeParticipant(roomName, identity) {
   return parseResponse(r, "removeParticipant");
 }
 
+export async function setParticipantSelfVisibility(roomName, identity, showSelf) {
+  const r = await makeAdminRequest(
+    `/api/admin/rooms/${encodeURIComponent(roomName)}/participants/${encodeURIComponent(identity)}/self-visibility`,
+    {
+      method: "POST",
+      body: JSON.stringify({ showSelf }),
+    }
+  );
+  return parseResponse(r, "setParticipantSelfVisibility");
+}
+
 export async function startRecording(room, mode) {
   const r = await makeAdminRequest("/api/admin/recording/start", {
     method: "POST",

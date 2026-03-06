@@ -125,6 +125,40 @@ function sanitizeIdentity(raw) {
   return trimmed;
 }
 
+function parseBooleanAttr(value, fallback = true) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) return true;
+    if (["false", "0", "no", "off"].includes(normalized)) return false;
+  }
+  return fallback;
+}
+
+async function updateParticipantShowSelf(room, identity, showSelf) {
+  const info = await roomService.getParticipant(room, identity);
+  const attributes = { ...(info?.attributes || {}) };
+  attributes.showSelf = showSelf ? "true" : "false";
+  await roomService.updateParticipant(room, identity, { attributes });
+}
+
+async function updateParticipantShowSelfWithRetry(room, identity, showSelf, retries = 8, intervalMs = 500) {
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    try {
+      await updateParticipantShowSelf(room, identity, showSelf);
+      return true;
+    } catch (err) {
+      const message = String(err?.message || "");
+      const notFound = err?.code === 404 || /not found/i.test(message);
+      if (!notFound) throw err;
+      if (attempt < retries - 1) {
+        await sleep(intervalMs);
+      }
+    }
+  }
+  return false;
+}
+
 function formatTimestamp(d = new Date()) {
   const pad = (n, w = 2) => String(n).padStart(w, "0");
   return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}_` +
@@ -374,8 +408,9 @@ app.post("/api/connection-details", async (req, res) => {
     if (sha256(key) !== inv.secretHash) return res.status(403).json({ error: "invalid key" });
 
     const requested = sanitizeIdentity(requestedIdentity);
+    let existingSession = null;
     if (requested) {
-      const existingSession = identitySessions.get(requested);
+      existingSession = identitySessions.get(requested);
       if (!existingSession || existingSession.inviteId !== inviteId) {
         return res.status(409).json({ error: "identity_revoked" });
       }
@@ -392,6 +427,7 @@ app.post("/api/connection-details", async (req, res) => {
 
     const identity = requested || `p_${randomId(10)}`;
     const displayName = typeof name === "string" && name.trim() ? name.trim().slice(0, 48) : undefined;
+    const showSelf = existingSession?.showSelf ?? true;
 
     const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
       identity,
@@ -409,7 +445,7 @@ app.post("/api/connection-details", async (req, res) => {
 
     const token = await at.toJwt(); // ✅ IMPORTANT
 
-    identitySessions.set(identity, { inviteId, room: inv.room, name: displayName });
+    identitySessions.set(identity, { inviteId, room: inv.room, name: displayName, showSelf });
 
     try {
       const existingDelay = await getExistingDelay(inv.room, identity);
@@ -426,6 +462,10 @@ app.post("/api/connection-details", async (req, res) => {
     } catch (err) {
       console.warn("delay keepAlive error:", err.message || err);
     }
+
+    updateParticipantShowSelfWithRetry(inv.room, identity, showSelf).catch((err) => {
+      console.warn("showSelf sync error:", err?.message || err);
+    });
 
     res.json({
       url: LIVEKIT_URL,          // http(s)
@@ -1022,18 +1062,23 @@ app.get("/api/admin/rooms/:roomName/participants", requireAdmin, async (req, res
     }
     const byIdentity = new Map(participants.map((p) => [p.identity, p]));
 
-    const formatted = participants.map((p) => ({
-      identity: p.identity,
-      name: p.name,
-      state: p.state,
-      present: true,
-      placeholder: false,
-      tracks: p.tracks.map((t) => ({
-        type: t.type,
-        sid: t.sid,
-        muted: t.muted,
-      })),
-    }));
+    const formatted = participants.map((p) => {
+      const session = identitySessions.get(p.identity);
+      const showSelf = parseBooleanAttr(p?.attributes?.showSelf, session?.showSelf ?? true);
+      return {
+        identity: p.identity,
+        name: p.name,
+        state: p.state,
+        present: true,
+        placeholder: false,
+        showSelf,
+        tracks: p.tracks.map((t) => ({
+          type: t.type,
+          sid: t.sid,
+          muted: t.muted,
+        })),
+      };
+    });
 
     for (const [identity, session] of identitySessions.entries()) {
       if (session.room !== roomName) continue;
@@ -1044,6 +1089,7 @@ app.get("/api/admin/rooms/:roomName/participants", requireAdmin, async (req, res
         state: "offline",
         present: false,
         placeholder: true,
+        showSelf: session.showSelf ?? true,
         tracks: [],
       });
     }
@@ -1086,6 +1132,48 @@ app.post("/api/admin/rooms/:roomName/participants/:identity/remove", requireAdmi
     res.json({ success: true, room: roomName, identity });
   } catch (err) {
     console.error("admin/removeParticipant error:", err.message || err);
+    res.status(500).json({ error: err.message || "internal_error" });
+  }
+});
+
+/**
+ * ADMIN: Toggle participant self-visibility
+ * POST /api/admin/rooms/:roomName/participants/:identity/self-visibility
+ * headers: { x-admin-key: ADMIN_KEY }
+ * body: { showSelf: boolean }
+ */
+app.post("/api/admin/rooms/:roomName/participants/:identity/self-visibility", requireAdmin, async (req, res) => {
+  try {
+    const { roomName, identity } = req.params;
+    const { showSelf } = req.body || {};
+    if (!roomName || !identity) {
+      return res.status(400).json({ error: "missing room or identity" });
+    }
+    if (typeof showSelf !== "boolean") {
+      return res.status(400).json({ error: "showSelf must be boolean" });
+    }
+
+    const session = identitySessions.get(identity);
+    if (session) {
+      session.showSelf = showSelf;
+      identitySessions.set(identity, session);
+    }
+
+    let applied = false;
+    try {
+      await updateParticipantShowSelf(roomName, identity, showSelf);
+      applied = true;
+    } catch (err) {
+      const message = String(err?.message || "");
+      const notFound = err?.code === 404 || /not found/i.test(message);
+      if (!notFound) {
+        throw err;
+      }
+    }
+
+    res.json({ success: true, room: roomName, identity, showSelf, applied });
+  } catch (err) {
+    console.error("admin/self-visibility error:", err.message || err);
     res.status(500).json({ error: err.message || "internal_error" });
   }
 });

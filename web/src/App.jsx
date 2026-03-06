@@ -120,6 +120,16 @@ function hasSubscribedVideo(participant) {
   return false;
 }
 
+function parseBooleanAttr(value, fallback = true) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) return true;
+    if (["false", "0", "no", "off"].includes(normalized)) return false;
+  }
+  return fallback;
+}
+
 function buildParticipantList(room) {
   const local = room.localParticipant;
   const remotes = Array.from(room.remoteParticipants.values());
@@ -139,14 +149,16 @@ function buildParticipantList(room) {
     }
   }
 
-  const list = [
-    {
+  const list = [];
+  const localShowSelf = parseBooleanAttr(local?.attributes?.showSelf, true);
+  if (localShowSelf) {
+    list.push({
       key: `local:${local.identity}`,
       participant: local,
       displayName: local.name || local.identity,
       displayIdentity: local.identity,
-    },
-  ];
+    });
+  }
 
   const usedRelays = new Set();
 
@@ -445,6 +457,7 @@ export default function App() {
     room
       .on(RoomEvent.ParticipantConnected, onAnyUpdate)
       .on(RoomEvent.ParticipantDisconnected, onAnyUpdate)
+      .on(RoomEvent.ParticipantAttributesChanged, onAnyUpdate)
       .on(RoomEvent.ActiveSpeakersChanged, onAnyUpdate);
 
     // Track changes
