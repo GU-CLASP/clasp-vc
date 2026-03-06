@@ -653,6 +653,7 @@ export default function App() {
         {participants.map((p) => (
           <ParticipantCard
             key={p.key}
+            room={room}
             participant={p.participant}
             displayName={p.displayName}
             displayIdentity={p.displayIdentity}
@@ -794,7 +795,7 @@ function RecordingView() {
   );
 }
 
-function ParticipantCard({ participant, displayName, displayIdentity, overrideVideoTrack }) {
+function ParticipantCard({ room, participant, displayName, displayIdentity, overrideVideoTrack }) {
   const videoRef = useRef(null);
   const audioRef = useRef(null);
 
@@ -830,9 +831,11 @@ function ParticipantCard({ participant, displayName, displayIdentity, overrideVi
     if (!el) return;
 
     if (audioPub?.track) {
-      attachTrack(el, audioPub.track);
-      el.autoplay = true;
-      el.playsInline = true;
+      if (true || displayIdentity !== room.localParticipant.identity) {
+        attachTrack(el, audioPub.track);
+        el.autoplay = true;
+        el.playsInline = true;
+      }
     } else {
       try {
         el.srcObject = null;
