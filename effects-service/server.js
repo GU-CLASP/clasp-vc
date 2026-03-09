@@ -145,7 +145,7 @@ app.post("/effects/delay", requireAdmin, async (req, res) => {
           effectSessions.set(participant, effectSession);
         }
         const ms = Date.now() - started;
-        console.log(`[effects-service] POST /effects/delay -> 200 (${ms}ms) active=true`);
+        console.log(`[effects-service] POST /effects/delay -> 200 (${ms}ms) for participant ${participant} active=true`);
         return res.json({ success: true, room, participant, delayMs: 0, active: true });
       }
 
@@ -155,7 +155,7 @@ app.post("/effects/delay", requireAdmin, async (req, res) => {
       }
       if (effectSessions.size === 0) roomEffects.delete(room);
       const ms = Date.now() - started;
-      console.log(`[effects-service] POST /effects/delay -> 200 (${ms}ms) active=false`);
+      console.log(`[effects-service] POST /effects/delay -> 200 (${ms}ms) for participant ${participant} active=false`);
       return res.json({ success: true, room, participant, delayMs: 0, active: false });
     }
 
@@ -163,7 +163,7 @@ app.post("/effects/delay", requireAdmin, async (req, res) => {
       if (participantName) existing.setParticipantName(participantName);
       await existing.setDelay(delay);
       const ms = Date.now() - started;
-      console.log(`[effects-service] POST /effects/delay -> 200 (${ms}ms) active=true`);
+      console.log(`[effects-service] POST /effects/delay -> 200 (${ms}ms) for participant ${participant} active=true`);
       return res.json({ success: true, room, participant, delayMs: delay, active: true });
     }
 
@@ -181,7 +181,7 @@ app.post("/effects/delay", requireAdmin, async (req, res) => {
     effectSessions.set(participant, effectSession);
 
     const ms = Date.now() - started;
-    console.log(`[effects-service] POST /effects/delay -> 200 (${ms}ms) active=true`);
+    console.log(`[effects-service] POST /effects/delay -> 200 (${ms}ms) for participant ${participant} active=true`);
     res.json({ success: true, room, participant, delayMs: delay, active: true });
   } catch (err) {
     console.error("effects/delay start error:", err);
@@ -209,6 +209,7 @@ app.post("/effects/delay/remove", requireAdmin, async (req, res) => {
     }
     if (effectSessions && effectSessions.size === 0) roomEffects.delete(room);
 
+    console.log(`[effects-service] POST /effects/delay/remove -> 200 for participant ${participant}`);
     res.json({ success: true, room, participant });
   } catch (err) {
     console.error("effects/delay remove error:", err);
@@ -282,6 +283,7 @@ class DelayEffectSession {
 
   async start() {
     this.running = true;
+    console.log(`Starting ${this.toString()}`);
     await this._connect();
     try {
       await this._syncTrackSids();
@@ -294,6 +296,7 @@ class DelayEffectSession {
 
   async stop() {
     this.running = false;
+    console.log(`Stopping ${this.toString()}`);
     this.generation += 1;
 
     try {
@@ -318,6 +321,7 @@ class DelayEffectSession {
   }
 
   async setDelay(delayMs) {
+    console.log(`Change delay of ${this.toString()} to ${delayMs}`);
     const prev = this.delayMs;
     this.delayMs = delayMs;
     // invalidate queued frames so change can take effect (freeze is OK)
@@ -338,6 +342,7 @@ class DelayEffectSession {
   }
 
   async _connect() {
+    console.log(`Connecting ${this.toString()}`);
     const token = await this._effectToken();
     const room = new Room({ adaptiveStream: true, dynacast: true });
     this.room = room;
@@ -345,7 +350,9 @@ class DelayEffectSession {
     room
       .on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
         if (!this.running) return;
+        console.log(`TrackSubscribed ${this.toString()} a`);
         if (participant.identity !== this.participant) return;
+        console.log(`TrackSubscribed ${this.toString()} b`);
         this.sourceActive = true;
         this._stopEffectIdle();
         if (track.kind === TrackKind.KIND_AUDIO) {
@@ -355,7 +362,9 @@ class DelayEffectSession {
         }
       })
       .on(RoomEvent.TrackUnsubscribed, (_track, _pub, participant) => {
+        console.log(`TrackUnsubscribed ${this.toString()} a`);
         if (participant.identity !== this.participant) return;
+        console.log(`TrackUnsubscribed ${this.toString()} b`);
         // If the source track disappears, drop output until it returns.
         this.generation += 1;
         this.sourceActive = false;
@@ -363,7 +372,9 @@ class DelayEffectSession {
       })
       .on(RoomEvent.ParticipantDisconnected, (participant) => {
         if (!this.running) return;
+        console.log(`ParticipantDisconnected ${this.toString()} a`);
         if (participant.identity !== this.participant) return;
+        console.log(`ParticipantDisconnected ${this.toString()} b`);
         // Source participant left; keep effect tracks alive (black screen), reset state.
         this.generation += 1;
         this.trackSids = new Set();
@@ -372,11 +383,14 @@ class DelayEffectSession {
       })
       .on(RoomEvent.Disconnected, () => {
         if (!this.running) return;
+        console.log(`Disconnected ${this.toString()}`);
         this._stopEffectIdle();
       })
       .on(RoomEvent.ParticipantConnected, async (participant) => {
         if (!this.running) return;
+        console.log(`ParticipantConnected ${this.toString()} a`);
         if (participant.identity === this.participant) return;
+        console.log(`ParticipantConnected ${this.toString()} b`);
         const info = {
           identity: participant.identity,
           attributes: participant.attributes,
@@ -385,6 +399,7 @@ class DelayEffectSession {
         if (!isSubscriberParticipant(info, this.participant)) return;
         if (this.trackSids.size === 0) return;
         try {
+          console.log(`Updating subscriptions for ${this.toString()}: ${this.trackSids} --> false`);
           await this.roomService.updateSubscriptions(
             this.roomName,
             participant.identity,
@@ -397,6 +412,7 @@ class DelayEffectSession {
       })
       .on(RoomEvent.ParticipantAttributesChanged, async (_changed, participant) => {
         if (!this.running) return;
+        console.log(`ParticipantAttributesChanged ${this.toString()}: ${participant}`);
         if (participant.identity === this.participant) return;
         if (this.trackSids.size === 0) return;
         const info = {
@@ -406,6 +422,7 @@ class DelayEffectSession {
         };
         const shouldUnsubscribe = this.delayMs > 0 && isSubscriberParticipant(info, this.participant);
         try {
+          console.log(`Updating subscriptions for ${this.toString()}: ${this.trackSids} --> ${!shouldUnsubscribe}`);
           await this.roomService.updateSubscriptions(
             this.roomName,
             participant.identity,
@@ -418,6 +435,7 @@ class DelayEffectSession {
       })
       .on(RoomEvent.TrackPublished, async (_pub, participant) => {
         if (participant.identity !== this.participant) return;
+        console.log(`TrackPublished ${this.toString()}: ${participant.identity}`);
         this.sourceActive = true;
         this._stopEffectIdle();
         await this._syncTrackSids();
@@ -425,6 +443,7 @@ class DelayEffectSession {
       })
       .on(RoomEvent.TrackUnpublished, async (_pub, participant) => {
         if (participant.identity !== this.participant) return;
+        console.log(`TrackUnpublished ${this.toString()}: ${participant}`);
         await this._syncTrackSids();
         await this._applySubscriptionState();
       });
@@ -458,6 +477,7 @@ class DelayEffectSession {
           if (t.sid) sids.add(t.sid);
         }
       }
+      console.log(`${this.toString()}: syncTrackSids ${Array.from(sids)}`);
       this.trackSids = sids;
     } catch (err) {
       console.warn("syncTrackSids failed:", err.message || err);
@@ -466,6 +486,7 @@ class DelayEffectSession {
   }
 
   async _applyUnsubscribeToAll() {
+    console.log(`${this.toString()}: _applyUnsubscribeToAll`);
     if (this.trackSids.size === 0) return;
     try {
       const participants = await this.roomService.listParticipants(this.roomName);
@@ -474,6 +495,7 @@ class DelayEffectSession {
       for (const p of participants) {
         if (!isSubscriberParticipant(p, this.participant)) continue;
         try {
+          console.log(`${this.toString()}: apply unsubscribe - updateSubscriptions: ${p.identity} ${trackSids} false`);
           await this.roomService.updateSubscriptions(
             this.roomName,
             p.identity,
@@ -490,6 +512,7 @@ class DelayEffectSession {
   }
 
   async _applyResubscribeToAll() {
+    console.log(`${this.toString()}: _applyResubscribeToAll`);
     if (this.trackSids.size === 0) return;
     try {
       const participants = await this.roomService.listParticipants(this.roomName);
@@ -498,6 +521,7 @@ class DelayEffectSession {
       for (const p of participants) {
         if (!isSubscriberParticipant(p, this.participant)) continue;
         try {
+          console.log(`${this.toString()}: apply resubscribe - updateSubscriptions: ${p.identity} ${trackSids} true`);
           await this.roomService.updateSubscriptions(
             this.roomName,
             p.identity,
@@ -529,10 +553,13 @@ class DelayEffectSession {
       console.warn("audio capture failed:", message);
       return;
     }
-    if (kind === "video") {
+    else if (kind === "video") {
       if (this.videoCaptureFailed) return;
       this.videoCaptureFailed = true;
       console.warn("video capture failed:", message);
+    }
+    else {
+      console.warn("unknown capture failed of type", kind, message);
     }
   }
 
@@ -632,6 +659,7 @@ class DelayEffectSession {
   async _ensureEffectTracks() {
     if (!this.room) return;
     const local = this.room.localParticipant;
+    console.log(`${this.toString()}: _ensureEffectTracks`);
 
     if (!this.audioSource && this.lastAudioInfo) {
       const audioInfo = this.lastAudioInfo;
@@ -660,6 +688,7 @@ class DelayEffectSession {
     if (!this.running) return;
     if (this.effectIdleAudioTimer || this.effectIdleVideoTimer) return;
     if (this.effectIdleStarting) return;
+    console.log(`${this.toString()}: _startEffectIdle`);
     this.effectIdleStarting = true;
 
     try {
@@ -710,6 +739,10 @@ class DelayEffectSession {
       clearInterval(this.effectIdleVideoTimer);
       this.effectIdleVideoTimer = null;
     }
+  }
+
+  toString() {
+    return `DelayEffectSession(${this.participant},${this.participantName},delay=${this.delayMs})`
   }
 
 }

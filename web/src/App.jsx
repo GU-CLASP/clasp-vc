@@ -814,6 +814,7 @@ function ParticipantCard({ room, participant, displayName, displayIdentity, over
 
     const track = overrideVideoTrack || videoPub?.track;
     if (track) {
+      console.log(`Adding video track for ${displayName}:`, videoRef);
       attachTrack(el, track);
       el.muted = true; // prevent local echo; remote video doesn’t carry audio anyway
       el.playsInline = true;
@@ -831,6 +832,7 @@ function ParticipantCard({ room, participant, displayName, displayIdentity, over
     if (!el) return;
 
     if (audioPub?.track) {
+      console.log(`Adding audio track for ${displayName}:`, audioRef);
       if (displayIdentity !== room.localParticipant.identity) {
         attachTrack(el, audioPub.track);
         el.autoplay = true;
