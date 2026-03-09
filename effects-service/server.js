@@ -420,7 +420,7 @@ class DelayEffectSession {
           attributes: participant.attributes,
           metadata: participant.metadata,
         };
-        const shouldUnsubscribe = this.delayMs > 0 && isSubscriberParticipant(info, this.participant);
+        const shouldUnsubscribe = isSubscriberParticipant(info, this.participant);
         try {
           console.log(`Updating subscriptions for ${this.toString()}: ${this.trackSids} --> ${!shouldUnsubscribe}`);
           await this.roomService.updateSubscriptions(
@@ -538,11 +538,8 @@ class DelayEffectSession {
   }
 
   async _applySubscriptionState() {
-    if (this.delayMs > 0) {
-      await this._applyUnsubscribeToAll();
-    } else {
-      await this._applyResubscribeToAll();
-    }
+    // Always use fx_* tracks to avoid flickering when switching delay on and off
+    await this._applyUnsubscribeToAll();
   }
 
   _handleCaptureError(kind, err) {
