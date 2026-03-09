@@ -831,7 +831,7 @@ function ParticipantCard({ room, participant, displayName, displayIdentity, over
     if (!el) return;
 
     if (audioPub?.track) {
-      if (true || displayIdentity !== room.localParticipant.identity) {
+      if (displayIdentity !== room.localParticipant.identity) {
         attachTrack(el, audioPub.track);
         el.autoplay = true;
         el.playsInline = true;
