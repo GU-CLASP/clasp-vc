@@ -1,7 +1,9 @@
 **/node_modules/
 **/recordings/
-data/
+/data/
 .env
 .env.*
 !.env.example
 .invite-link
+
+/web/dist
