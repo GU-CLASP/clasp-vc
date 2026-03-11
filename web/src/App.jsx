@@ -780,6 +780,7 @@ function RecordingView() {
         {participants.map((p) => (
           <ParticipantCard
             key={p.key}
+            room={room}
             participant={p.participant}
             displayName={p.displayName}
             displayIdentity={p.displayIdentity}
@@ -833,7 +834,7 @@ function ParticipantCard({ room, participant, displayName, displayIdentity, over
 
     if (audioPub?.track) {
       console.log(`Adding audio track for ${displayName}:`, audioRef);
-      if (displayIdentity !== room.localParticipant.identity) {
+      if (displayIdentity !== room?.localParticipant?.identity) {
         attachTrack(el, audioPub.track);
         el.autoplay = true;
         el.playsInline = true;

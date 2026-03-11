@@ -5,8 +5,11 @@ import App from "./App.jsx";
 window.addEventListener("error", (e) => console.error("window.error", e.error || e.message));
 window.addEventListener("unhandledrejection", (e) => console.error("unhandledrejection", e.reason));
 
-ReactDOM.createRoot(document.getElementById("root")).render(
+const isRecordingRoute = window.location.pathname.startsWith("/recording");
+const app = isRecordingRoute ? <App /> : (
   <React.StrictMode>
     <App />
   </React.StrictMode>
 );
+
+ReactDOM.createRoot(document.getElementById("root")).render(app);
