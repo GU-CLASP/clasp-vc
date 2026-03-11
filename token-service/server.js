@@ -142,23 +142,6 @@ async function updateParticipantShowSelf(room, identity, showSelf) {
   await roomService.updateParticipant(room, identity, { attributes });
 }
 
-async function updateParticipantShowSelfWithRetry(room, identity, showSelf, retries = 8, intervalMs = 500) {
-  for (let attempt = 0; attempt < retries; attempt += 1) {
-    try {
-      await updateParticipantShowSelf(room, identity, showSelf);
-      return true;
-    } catch (err) {
-      const message = String(err?.message || "");
-      const notFound = err?.code === 404 || /not found/i.test(message);
-      if (!notFound) throw err;
-      if (attempt < retries - 1) {
-        await sleep(intervalMs);
-      }
-    }
-  }
-  return false;
-}
-
 function formatTimestamp(d = new Date()) {
   const pad = (n, w = 2) => String(n).padStart(w, "0");
   return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}_` +
@@ -462,10 +445,6 @@ app.post("/api/connection-details", async (req, res) => {
     } catch (err) {
       console.warn("delay keepAlive error:", err.message || err);
     }
-
-    updateParticipantShowSelfWithRetry(inv.room, identity, showSelf).catch((err) => {
-      console.warn("showSelf sync error:", err?.message || err);
-    });
 
     res.json({
       url: LIVEKIT_URL,          // http(s)
