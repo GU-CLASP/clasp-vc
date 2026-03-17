@@ -9,6 +9,8 @@ import {
 
 import { getConnectionDetails, leaveSession } from "./api.js";
 import AdminPage from "./AdminPage.jsx";
+import RecordingView from "./RecordingView.jsx";
+import ParticipantCard from "./ParticipantCard.jsx";
 
 function parseInviteFromUrl() {
   const pathname = stripBasePath(window.location.pathname);
@@ -34,14 +36,6 @@ function stripBasePath(pathname) {
     return next.startsWith("/") ? next : `/${next}`;
   }
   return pathname;
-}
-
-function parseRecordingParams() {
-  const params = new URLSearchParams(window.location.search);
-  return {
-    url: params.get("url"),
-    token: params.get("token"),
-  };
 }
 
 const IDENTITY_STORAGE_PREFIX = "clasp_vc_identity:";
@@ -95,19 +89,6 @@ function isAdminPath() {
 
 function isRecordingPath() {
   return stripBasePath(window.location.pathname).startsWith("/recording");
-}
-
-function attachTrack(el, track) {
-  // livekit-client track.attach() returns the element it attached to
-  // but we want to attach to our existing element.
-  // Easiest: detach anything currently on it, then attach fresh.
-  try {
-    track.detach(); // detach from any prior elements
-  } catch {}
-  const attachedEl = track.attach(el);
-  // If attach() replaced element, we can copy attributes back,
-  // but in practice with provided el this usually works.
-  return attachedEl;
 }
 
 function hasSubscribedVideo(participant) {
@@ -189,64 +170,6 @@ function buildParticipantList(room) {
   for (const [id, relay] of relays.entries()) {
     if (originals.has(id) || usedRelays.has(id)) continue;
     if (id === local.identity) continue;
-    list.push({
-      key: `fx:${relay.identity}`,
-      participant: relay,
-      displayName: relay.name || id,
-      displayIdentity: id,
-    });
-  }
-
-  return list;
-}
-
-function buildRecordingParticipantList(room) {
-  const remotes = Array.from(room.remoteParticipants.values());
-  const relays = new Map();
-  const originals = new Map();
-
-  for (const p of remotes) {
-    if (p.identity.startsWith("admin_") || p.identity.startsWith("EG_")) {
-      continue;
-    }
-    if (p.identity.startsWith("fx_")) {
-      const originalId = p.identity.slice("fx_".length);
-      relays.set(originalId, p);
-    } else {
-      originals.set(p.identity, p);
-    }
-  }
-
-  const list = [];
-
-  const usedRelays = new Set();
-
-  for (const [id, original] of originals.entries()) {
-    const relay = relays.get(id);
-    const originalHasVideo = hasSubscribedVideo(original);
-    const shouldUseRelay = relay && !originalHasVideo;
-
-    if (shouldUseRelay) {
-      usedRelays.add(id);
-      list.push({
-        key: `fx:${relay.identity}`,
-        participant: relay,
-        displayName: original.name || original.identity,
-        displayIdentity: original.identity,
-      });
-      continue;
-    }
-
-    list.push({
-      key: `remote:${original.identity}`,
-      participant: original,
-      displayName: original.name || original.identity,
-      displayIdentity: original.identity,
-    });
-  }
-
-  for (const [id, relay] of relays.entries()) {
-    if (originals.has(id) || usedRelays.has(id)) continue;
     list.push({
       key: `fx:${relay.identity}`,
       participant: relay,
@@ -673,222 +596,6 @@ export default function App() {
         >
           Leave
         </button>
-      </div>
-    </div>
-  );
-}
-
-function RecordingView() {
-  const { url, token } = useMemo(parseRecordingParams, []);
-  const [status, setStatus] = useState("connecting");
-  const [err, setErr] = useState("");
-  const roomRef = useRef(null);
-  const startedRef = useRef(false);
-  const [, bump] = useState(0);
-
-  const forceRender = () => bump((x) => x + 1);
-
-  useEffect(() => {
-    if (!url || !token) {
-      setErr("Missing recording url or token");
-      setStatus("error");
-      return;
-    }
-
-    let cancelled = false;
-    const room = new Room({ adaptiveStream: true, dynacast: true });
-    roomRef.current = room;
-
-    const onAnyUpdate = () => forceRender();
-
-    room
-      .on(RoomEvent.ParticipantConnected, onAnyUpdate)
-      .on(RoomEvent.ParticipantDisconnected, onAnyUpdate)
-      .on(RoomEvent.TrackSubscribed, onAnyUpdate)
-      .on(RoomEvent.TrackUnsubscribed, onAnyUpdate);
-
-    room.on(RoomEvent.Disconnected, () => {
-      if (!cancelled) setStatus("idle");
-      if (startedRef.current) {
-        console.log("END_RECORDING");
-        startedRef.current = false;
-      }
-    });
-
-    (async () => {
-      try {
-        await room.connect(url, token, { autoSubscribe: true });
-        if (cancelled) return;
-        setStatus("connected");
-        if (!startedRef.current) {
-          console.log("START_RECORDING");
-          startedRef.current = true;
-        }
-        forceRender();
-      } catch (e) {
-        console.error("recording connect error:", e);
-        if (!cancelled) {
-          setStatus("error");
-          setErr(e?.message || String(e));
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      try {
-        room.removeAllListeners();
-      } catch {}
-      try {
-        room.disconnect();
-      } catch {}
-      if (startedRef.current) {
-        console.log("END_RECORDING");
-        startedRef.current = false;
-      }
-      roomRef.current = null;
-    };
-  }, [url, token]);
-
-  const room = roomRef.current;
-  const participants = room ? buildRecordingParticipantList(room) : [];
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "#000",
-        fontFamily: "system-ui",
-        padding: 12,
-      }}
-    >
-      {err ? (
-        <div style={{ color: "#fff", padding: 12, background: "rgba(0,0,0,0.6)" }}>
-          {err}
-        </div>
-      ) : null}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-          gap: 12,
-          height: "100%",
-          alignContent: "center",
-        }}
-      >
-        {participants.map((p) => (
-          <ParticipantCard
-            key={p.key}
-            room={room}
-            participant={p.participant}
-            displayName={p.displayName}
-            displayIdentity={p.displayIdentity}
-          />
-        ))}
-      </div>
-      {status !== "connected" ? (
-        <div style={{ position: "absolute", top: 12, right: 12, color: "#fff", opacity: 0.8 }}>
-          {status}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ParticipantCard({ room, participant, displayName, displayIdentity, overrideVideoTrack }) {
-  const videoRef = useRef(null);
-  const audioRef = useRef(null);
-
-  // Pick the "best" subscribed video/audio track
-  const tracks = Array.from(participant.trackPublications.values());
-  const videoPub = tracks.find(
-    (t) => t.kind === Track.Kind.Video && t.track && t.isSubscribed
-  );
-  const audioPub = tracks.find(
-    (t) => t.kind === Track.Kind.Audio && t.track && t.isSubscribed
-  );
-
-  useEffect(() => {
-    const el = videoRef.current;
-    if (!el) return;
-
-    const track = overrideVideoTrack || videoPub?.track;
-    if (track) {
-      console.log(`Adding video track for ${displayName}:`, videoRef);
-      attachTrack(el, track);
-      el.muted = true; // prevent local echo; remote video doesn’t carry audio anyway
-      el.playsInline = true;
-      el.autoplay = true;
-    } else {
-      // Clear srcObject if any (some browsers)
-      try {
-        el.srcObject = null;
-      } catch {}
-    }
-  }, [videoPub?.trackSid, videoPub?.track, overrideVideoTrack]);
-
-  useEffect(() => {
-    const el = audioRef.current;
-    if (!el) return;
-
-    if (audioPub?.track) {
-      console.log(`Adding audio track for ${displayName}:`, audioRef);
-      if (displayIdentity !== room?.localParticipant?.identity) {
-        attachTrack(el, audioPub.track);
-        el.autoplay = true;
-        el.playsInline = true;
-      }
-    } else {
-      try {
-        el.srcObject = null;
-      } catch {}
-    }
-  }, [audioPub?.trackSid, audioPub?.track]);
-
-  return (
-    <div
-      style={{
-        border: "1px solid #ddd",
-        borderRadius: 10,
-        padding: 10,
-        minHeight: 240,
-      }}
-    >
-      <div style={{ marginBottom: 8 }}>
-        <b>{displayName || participant.name || participant.identity}</b>
-        <div style={{ opacity: 0.7, fontSize: 12 }}>
-          {displayIdentity || participant.identity}
-        </div>
-      </div>
-
-      {/* ✅ Video container with aspect ratio */}
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          aspectRatio: "16 / 9",  // Firefox supports this now
-          background: "#111",
-          borderRadius: 8,
-          overflow: "hidden",
-        }}
-      >
-        <video
-          ref={videoRef}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "contain",  // ✅ show full frame, no cropping
-          }}
-        />
-      </div>
-
-      {/* Audio element is separate */}
-      <audio ref={audioRef} />
-
-      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-        video: {overrideVideoTrack ? "local" : videoPub?.track ? "subscribed" : "none"} | audio:{" "}
-        {audioPub?.track ? "subscribed" : "none"}
       </div>
     </div>
   );
