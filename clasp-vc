@@ -234,11 +234,18 @@ def do_up():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2 or sys.argv[1] not in ("up", "down", "status"):
+    if len(sys.argv) == 1:
+        usage()
+        do_status()
+    elif len(sys.argv) != 2:
         usage()
         raise SystemExit(1)
-    if sys.argv[1] == "down":
+    elif sys.argv[1] == "down" or sys.argv[1] == "stop":
         raise SystemExit(do_down())
-    if sys.argv[1] == "status":
+    elif sys.argv[1] == "status":
         raise SystemExit(do_status())
-    raise SystemExit(do_up())
+    elif sys.argv[1] == "up" or sys.argv[1] == "start":
+        raise SystemExit(do_up())
+    else:
+        usage()
+        raise SystemExit(1)
