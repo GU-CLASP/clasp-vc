@@ -746,9 +746,9 @@ function PreviewTile({ participant, displayName, displayIdentity }) {
     if (!el) return;
     if (videoPub?.track) {
       attachTrack(el, videoPub.track);
-      el.muted = true;
-      el.playsInline = true;
+      el.muted = true; // Video shouldn't contain audio, but mute it anyway
       el.autoplay = true;
+      el.playsInline = true;
     } else {
       try {
         el.srcObject = null;
@@ -763,7 +763,6 @@ function PreviewTile({ participant, displayName, displayIdentity }) {
       attachTrack(el, audioPub.track);
       el.autoplay = true;
       el.playsInline = true;
-      el.muted = true;
     } else {
       try {
         el.srcObject = null;
