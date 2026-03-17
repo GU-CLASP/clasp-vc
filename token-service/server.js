@@ -43,7 +43,8 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: true }));
 app.use((req, _res, next) => {
-  console.log(`${req.method} ${req.path}`);
+  let timestamp = new Date().toISOString();
+  console.log(`${timestamp} ${req.method} ${req.path}`);
   next();
 });
 

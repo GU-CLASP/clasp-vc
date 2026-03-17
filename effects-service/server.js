@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import {
   AccessToken,
   RoomServiceClient,
@@ -21,6 +22,12 @@ import {
 
 const app = express();
 app.use(express.json());
+app.use(cors({ origin: true }));
+app.use((req, _res, next) => {
+  let timestamp = new Date().toISOString();
+  console.log(`${timestamp} ${req.method} ${req.path}`);
+  next();
+});
 
 process.on("unhandledRejection", (reason) => {
   console.error("unhandledRejection:", reason);
@@ -457,7 +464,7 @@ class DelayEffectSession {
       })
       .on(RoomEvent.TrackUnpublished, async (_pub, participant) => {
         if (participant.identity !== this.participant) return;
-        console.log(`TrackUnpublished ${this.toString()}: ${participant}`);
+        console.log(`TrackUnpublished ${this.toString()}: ${participant.identity}`);
         await this._syncTrackSids();
         await this._applySubscriptionState();
       });
