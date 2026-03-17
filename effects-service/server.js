@@ -46,6 +46,20 @@ const roomService = new RoomServiceClient(
 // room -> Map(participantIdentity -> DelayEffectSession)
 const roomEffects = new Map();
 
+/**
+ * Custom version of setTimeout which invokes the function directly if the delay is 0.
+ * 
+ * @param {function} func Function to invoke
+ * @param {number} delay Delay to invoke the function at
+ */
+function myTimeout(func, delay) {
+  if (delay == 0) {
+    func();
+  } else {
+    setTimeout(func, delay);
+  }
+}
+
 function mustEnv(name) {
   const v = process.env[name];
   if (!v) throw new Error(`Missing env var: ${name}`);
@@ -605,7 +619,7 @@ class DelayEffectSession {
         frame.samplesPerChannel
       );
 
-      setTimeout(() => {
+      myTimeout(() => {
         if (!this.running) return;
         if (generation !== this.generation) return;
         this._safeCaptureAudio(delayedFrame);
@@ -645,7 +659,7 @@ class DelayEffectSession {
         frame.type
       );
 
-      setTimeout(() => {
+      myTimeout(() => {
         if (!this.running) return;
         if (generation !== this.generation) return;
         this._safeCaptureVideo(delayedFrame);
