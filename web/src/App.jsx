@@ -190,6 +190,31 @@ function buildParticipantList(room) {
   return list;
 }
 
+function syncParticipantSubscriptions(room, role) {
+  if (!room || role !== "participant") return;
+
+  const localAdmissionStatus = room.localParticipant?.attributes?.admissionStatus || "pending";
+  const localCanReceive = localAdmissionStatus === "admitted";
+
+  for (const remoteParticipant of room.remoteParticipants.values()) {
+    if (remoteParticipant.identity.startsWith("admin_") || remoteParticipant.identity.startsWith("EG_")) {
+      continue;
+    }
+
+    const remoteAdmissionStatus = remoteParticipant.attributes?.admissionStatus || "pending";
+    const shouldSubscribe =
+      localCanReceive &&
+      !remoteParticipant.identity.startsWith("fx_") &&
+      remoteAdmissionStatus === "admitted";
+
+    for (const publication of remoteParticipant.trackPublications.values()) {
+      if (publication.isDesired !== shouldSubscribe) {
+        publication.setSubscribed(shouldSubscribe);
+      }
+    }
+  }
+}
+
 export default function App() {
   const { inviteId, key, adminKey, token, roomName, name: urlName } = useMemo(parseInviteFromUrl, []);
   const storedSession = useMemo(() => loadStoredSession(inviteId, key), [inviteId, key]);
@@ -389,17 +414,32 @@ export default function App() {
 
     // Participant changes
     room
-      .on(RoomEvent.ParticipantConnected, onAnyUpdate)
-      .on(RoomEvent.ParticipantDisconnected, onAnyUpdate)
-      .on(RoomEvent.ParticipantAttributesChanged, onAnyUpdate)
+      .on(RoomEvent.ParticipantConnected, () => {
+        syncParticipantSubscriptions(room, conn?.role);
+        onAnyUpdate();
+      })
+      .on(RoomEvent.ParticipantDisconnected, () => {
+        syncParticipantSubscriptions(room, conn?.role);
+        onAnyUpdate();
+      })
+      .on(RoomEvent.ParticipantAttributesChanged, () => {
+        syncParticipantSubscriptions(room, conn?.role);
+        onAnyUpdate();
+      })
       .on(RoomEvent.ActiveSpeakersChanged, onAnyUpdate);
 
     // Track changes
     room
       .on(RoomEvent.TrackSubscribed, onAnyUpdate)
       .on(RoomEvent.TrackUnsubscribed, onAnyUpdate)
-      .on(RoomEvent.TrackPublished, onAnyUpdate)
-      .on(RoomEvent.TrackUnpublished, onAnyUpdate);
+      .on(RoomEvent.TrackPublished, () => {
+        syncParticipantSubscriptions(room, conn?.role);
+        onAnyUpdate();
+      })
+      .on(RoomEvent.TrackUnpublished, () => {
+        syncParticipantSubscriptions(room, conn?.role);
+        onAnyUpdate();
+      });
 
     // Connection lifecycle
     room
@@ -443,6 +483,7 @@ export default function App() {
         const shouldAutoSubscribe = conn?.role !== "participant";
         await room.connect(conn.url, conn.token, { autoSubscribe: shouldAutoSubscribe });
         if (cancelled) return;
+        syncParticipantSubscriptions(room, conn?.role);
         setStatus("connected");
         forceRender();
       } catch (e) {
