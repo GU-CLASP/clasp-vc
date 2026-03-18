@@ -147,7 +147,7 @@ function participantPermissionForSession(session) {
   return {
     canPublish: true,
     canPublishData: true,
-    canSubscribe: session?.admissionStatus === "admitted",
+    canSubscribe: true,// session?.admissionStatus === "admitted",
   };
 }
 
@@ -538,7 +538,7 @@ app.post("/api/connection-details", async (req, res) => {
       room: inv.room,
       roomJoin: true,
       canPublish: true,
-      canSubscribe: session.admissionStatus === "admitted",
+      canSubscribe: true,// session.admissionStatus === "admitted",
       canPublishData: true,
     });
 
