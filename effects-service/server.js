@@ -369,7 +369,11 @@ class DelayEffectSession {
     this.room = room;
 
     room
+      .on(RoomEvent.TrackSubscriptionFailed, (a, b, c) => {
+        console.log("trackSubscriptionFailed", a, b.name, b.sid, c);
+      })
       .on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
+        console.log("trackSubscribed", track.sid, _pub.sid, participant.name, participant.sid);
         if (!this.running) return;
         console.log(`TrackSubscribed ${this.toString()} a`);
         if (participant.identity !== this.participant) return;
@@ -383,6 +387,7 @@ class DelayEffectSession {
         }
       })
       .on(RoomEvent.TrackUnsubscribed, (_track, _pub, participant) => {
+        console.log("trackUnsubscribed", _track.sid, _pub.sid, participant.name, participant.sid);
         console.log(`TrackUnsubscribed ${this.toString()} a`);
         if (participant.identity !== this.participant) return;
         console.log(`TrackUnsubscribed ${this.toString()} b`);
