@@ -425,7 +425,7 @@ class DelayEffectSession {
         if (!isSubscriberParticipant(info, this.participant)) return;
         if (this.trackSids.size === 0) return;
         try {
-          console.log(`Updating subscriptions for ${this.toString()}: ${this.trackSids} --> false`);
+          console.log(`Updating subscriptions for ${this.toString()}: ${this.trackSids} --> false (ParticipantConnected)`);
           await this.roomService.updateSubscriptions(
             this.roomName,
             participant.identity,
@@ -448,7 +448,7 @@ class DelayEffectSession {
         };
         const shouldUnsubscribe = isSubscriberParticipant(info, this.participant);
         try {
-          console.log(`Updating subscriptions for ${this.toString()}: ${this.trackSids} --> ${!shouldUnsubscribe}`);
+          console.log(`Updating subscriptions for ${this.toString()}: ${this.trackSids} --> ${!shouldUnsubscribe} (ParticipantAttributesChanged)`);
           await this.roomService.updateSubscriptions(
             this.roomName,
             participant.identity,
