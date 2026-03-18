@@ -16,7 +16,15 @@ function attachTrack(el, track) {
   return attachedEl;
 }
 
-export default function ParticipantCard({ room, participant, displayName, displayIdentity, overrideVideoTrack }) {
+export default function ParticipantCard({
+  room,
+  participant,
+  displayName,
+  displayIdentity,
+  overrideVideoTrack,
+  overrideAudioTrack,
+  muteAudioPlayback = false,
+}) {
   const videoRef = useRef(null);
   const audioRef = useRef(null);
 
@@ -52,19 +60,19 @@ export default function ParticipantCard({ room, participant, displayName, displa
     const el = audioRef.current;
     if (!el) return;
 
-    if (audioPub?.track) {
+    const track = overrideAudioTrack || audioPub?.track;
+    if (track) {
       console.log(`Adding audio track for ${displayName}:`, audioRef);
-      if (displayIdentity !== room?.localParticipant?.identity) {
-        attachTrack(el, audioPub.track);
-        el.autoplay = true;
-        el.playsInline = true;
-      }
+      attachTrack(el, track);
+      el.autoplay = true;
+      el.playsInline = true;
+      el.muted = muteAudioPlayback || displayIdentity === room?.localParticipant?.identity;
     } else {
       try {
         el.srcObject = null;
       } catch {}
     }
-  }, [audioPub?.trackSid, audioPub?.track]);
+  }, [audioPub?.trackSid, audioPub?.track, overrideAudioTrack, muteAudioPlayback, displayIdentity, room]);
 
   return (
     <div
@@ -108,7 +116,7 @@ export default function ParticipantCard({ room, participant, displayName, displa
 
       <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
         video: {overrideVideoTrack ? "local" : videoPub?.track ? "subscribed" : "none"} | audio:{" "}
-        {audioPub?.track ? "subscribed" : "none"}
+        {overrideAudioTrack ? "local" : audioPub?.track ? "subscribed" : "none"}
       </div>
     </div>
   );

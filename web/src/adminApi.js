@@ -83,6 +83,14 @@ export async function setParticipantSelfVisibility(roomName, identity, showSelf)
   return parseResponse(r, "setParticipantSelfVisibility");
 }
 
+export async function admitParticipant(roomName, identity) {
+  const r = await makeAdminRequest(
+    `/api/admin/rooms/${encodeURIComponent(roomName)}/participants/${encodeURIComponent(identity)}/admit`,
+    { method: "POST" }
+  );
+  return parseResponse(r, "admitParticipant");
+}
+
 export async function startRecording(room, mode) {
   const r = await makeAdminRequest("/api/admin/recording/start", {
     method: "POST",

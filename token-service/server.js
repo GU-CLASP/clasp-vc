@@ -88,7 +88,7 @@ const INVITE_MAX_USES = Number(process.env.INVITE_MAX_USES || 1);
 const invites = new Map(); // inviteId -> { secretHash, room, role, exp, uses, maxUses }
 
 // Track participant identities issued per invite so we can clean up effect tracks on leave.
-const identitySessions = new Map(); // identity -> { inviteId, room, name }
+const identitySessions = new Map(); // identity -> { inviteId, room, name, showSelf, admissionStatus }
 
 function toWsUrl(u) {
   return u.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
@@ -141,6 +141,104 @@ async function updateParticipantShowSelf(room, identity, showSelf) {
   const attributes = { ...(info?.attributes || {}) };
   attributes.showSelf = showSelf ? "true" : "false";
   await roomService.updateParticipant(room, identity, { attributes });
+}
+
+function participantPermissionForSession(session) {
+  return {
+    canPublish: true,
+    canPublishData: true,
+    canSubscribe: session?.admissionStatus === "admitted",
+  };
+}
+
+async function applyParticipantSessionState(room, identity) {
+  const session = identitySessions.get(identity);
+  if (!session) return;
+
+  const info = await roomService.getParticipant(room, identity);
+  const attributes = { ...(info?.attributes || {}) };
+  attributes.showSelf = session.showSelf === false ? "false" : "true";
+  attributes.admissionStatus = session.admissionStatus || "pending";
+
+  await roomService.updateParticipant(room, identity, {
+    attributes,
+    permission: participantPermissionForSession(session),
+    name: session.name,
+  });
+}
+
+function scheduleApplyParticipantSessionState(room, identity, attempts = 20, delayMs = 500) {
+  const run = async (remaining) => {
+    const session = identitySessions.get(identity);
+    if (!session || session.room !== room) return;
+    try {
+      await applyParticipantSessionState(room, identity);
+    } catch (err) {
+      const message = String(err?.message || "");
+      const notFound = err?.code === 404 || /not found/i.test(message);
+      if (!notFound || remaining <= 1) {
+        if (!notFound) {
+          console.warn("applyParticipantSessionState error:", err?.message || err);
+        }
+        return;
+      }
+      const timeoutId = setTimeout(() => {
+        run(remaining - 1).catch((nextErr) => {
+          console.warn("applyParticipantSessionState retry error:", nextErr?.message || nextErr);
+        });
+      }, delayMs);
+      timeoutId.unref?.();
+    }
+  };
+
+  run(attempts).catch((err) => {
+    console.warn("scheduleApplyParticipantSessionState error:", err?.message || err);
+  });
+}
+
+async function syncAdmittedSubscriptions(room) {
+  const participants = await roomService.listParticipants(room);
+  const connected = participants.filter((p) => isRecordableParticipant(p.identity));
+  const admitted = connected.filter(
+    (p) => identitySessions.get(p.identity)?.admissionStatus === "admitted"
+  );
+  const pendingTrackSids = connected
+    .filter((p) => identitySessions.get(p.identity)?.admissionStatus !== "admitted")
+    .flatMap((p) => (p.tracks || []).map((t) => t.sid).filter(Boolean));
+
+  for (const participant of admitted) {
+    const subscribeTrackSids = admitted
+      .filter((other) => other.identity !== participant.identity)
+      .flatMap((other) => (other.tracks || []).map((t) => t.sid).filter(Boolean));
+
+    if (subscribeTrackSids.length > 0) {
+      await roomService.updateSubscriptions(room, participant.identity, subscribeTrackSids, true);
+    }
+    if (pendingTrackSids.length > 0) {
+      await roomService.updateSubscriptions(room, participant.identity, pendingTrackSids, false);
+    }
+  }
+}
+
+function scheduleSyncAdmittedSubscriptions(room, attempts = 6, delayMs = 500) {
+  const run = async (remaining) => {
+    try {
+      await syncAdmittedSubscriptions(room);
+    } catch (err) {
+      console.warn("syncAdmittedSubscriptions error:", err?.message || err);
+    }
+    if (remaining <= 1) return;
+    const timeoutId = setTimeout(() => {
+      run(remaining - 1).catch((err) => {
+        console.warn("scheduleSyncAdmittedSubscriptions retry error:", err?.message || err);
+      });
+    }, delayMs);
+    timeoutId.unref?.();
+  };
+
+  run(attempts).catch((err) => {
+    console.warn("scheduleSyncAdmittedSubscriptions error:", err?.message || err);
+  });
 }
 
 function formatTimestamp(d = new Date()) {
@@ -386,9 +484,6 @@ app.post("/api/connection-details", async (req, res) => {
       return res.status(410).json({ error: "invite expired" });
     }
 
-    if (inv.maxUses > 0 && inv.uses >= inv.maxUses) {
-      return res.status(410).json({ error: "invite already used" });
-    }
     if (sha256(key) !== inv.secretHash) return res.status(403).json({ error: "invalid key" });
 
     const requested = sanitizeIdentity(requestedIdentity);
@@ -400,7 +495,6 @@ app.post("/api/connection-details", async (req, res) => {
       }
     }
 
-    inv.uses += 1;
     if (requested) {
       try {
         await roomService.removeParticipant(inv.room, requested);
@@ -409,13 +503,34 @@ app.post("/api/connection-details", async (req, res) => {
       }
     }
 
-    const identity = requested || `p_${randomId(10)}`;
+    let identity = requested;
     const displayName = typeof name === "string" && name.trim() ? name.trim().slice(0, 48) : undefined;
-    const showSelf = existingSession?.showSelf ?? true;
+    let session = existingSession;
+
+    if (!session) {
+      if (inv.maxUses > 0 && inv.uses >= inv.maxUses) {
+        return res.status(410).json({ error: "invite already used" });
+      }
+      inv.uses += 1;
+      identity = `p_${randomId(10)}`;
+      session = {
+        inviteId,
+        room: inv.room,
+        name: displayName,
+        showSelf: true,
+        admissionStatus: "pending",
+      };
+      identitySessions.set(identity, session);
+    } else if (displayName && displayName !== session.name) {
+      session.name = displayName;
+      identitySessions.set(identity, session);
+    }
+
+    const showSelf = session.showSelf ?? true;
 
     const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
       identity,
-      name: displayName,
+      name: displayName ?? session.name,
       ttl: 60 * 15,
     });
 
@@ -423,13 +538,23 @@ app.post("/api/connection-details", async (req, res) => {
       room: inv.room,
       roomJoin: true,
       canPublish: true,
-      canSubscribe: true,
+      canSubscribe: session.admissionStatus === "admitted",
       canPublishData: true,
     });
 
     const token = await at.toJwt(); // ✅ IMPORTANT
 
-    identitySessions.set(identity, { inviteId, room: inv.room, name: displayName, showSelf });
+    identitySessions.set(identity, {
+      ...session,
+      inviteId,
+      room: inv.room,
+      name: displayName ?? session.name,
+      showSelf,
+    });
+    scheduleApplyParticipantSessionState(inv.room, identity);
+    if (session.admissionStatus === "admitted") {
+      scheduleSyncAdmittedSubscriptions(inv.room);
+    }
 
     try {
       const existingDelay = await getExistingDelay(inv.room, identity);
@@ -440,7 +565,7 @@ app.post("/api/connection-details", async (req, res) => {
           participant: identity,
           delayMs: existingDelay,
           keepAlive: true,
-          participantName: displayName,
+          participantName: displayName ?? session.name,
         }),
       });
     } catch (err) {
@@ -448,6 +573,7 @@ app.post("/api/connection-details", async (req, res) => {
     }
 
     res.json({
+      admissionStatus: session.admissionStatus || "pending",
       url: LIVEKIT_URL,          // http(s)
       wsUrl: toWsUrl(LIVEKIT_URL),
       token,
@@ -1052,6 +1178,7 @@ app.get("/api/admin/rooms/:roomName/participants", requireAdmin, async (req, res
         present: true,
         placeholder: false,
         showSelf,
+        admissionStatus: session?.admissionStatus || "pending",
         tracks: p.tracks.map((t) => ({
           type: t.type,
           sid: t.sid,
@@ -1066,10 +1193,11 @@ app.get("/api/admin/rooms/:roomName/participants", requireAdmin, async (req, res
       formatted.push({
         identity,
         name: session.name,
-        state: "offline",
+        state: session.admissionStatus === "admitted" ? "offline" : "waiting",
         present: false,
         placeholder: true,
         showSelf: session.showSelf ?? true,
+        admissionStatus: session.admissionStatus || "pending",
         tracks: [],
       });
     }
@@ -1154,6 +1282,41 @@ app.post("/api/admin/rooms/:roomName/participants/:identity/self-visibility", re
     res.json({ success: true, room: roomName, identity, showSelf, applied });
   } catch (err) {
     console.error("admin/self-visibility error:", err.message || err);
+    res.status(500).json({ error: err.message || "internal_error" });
+  }
+});
+
+/**
+ * ADMIN: Admit participant to the room
+ * POST /api/admin/rooms/:roomName/participants/:identity/admit
+ * headers: { x-admin-key: ADMIN_KEY }
+ */
+app.post("/api/admin/rooms/:roomName/participants/:identity/admit", requireAdmin, async (req, res) => {
+  try {
+    const { roomName, identity } = req.params;
+    if (!roomName || !identity) {
+      return res.status(400).json({ error: "missing room or identity" });
+    }
+
+    const session = identitySessions.get(identity);
+    if (!session || session.room !== roomName) {
+      return res.status(404).json({ error: "participant not found" });
+    }
+
+    session.admissionStatus = "admitted";
+    identitySessions.set(identity, session);
+
+    scheduleApplyParticipantSessionState(roomName, identity);
+    scheduleSyncAdmittedSubscriptions(roomName);
+
+    res.json({
+      success: true,
+      room: roomName,
+      identity,
+      admissionStatus: session.admissionStatus,
+    });
+  } catch (err) {
+    console.error("admin/admitParticipant error:", err.message || err);
     res.status(500).json({ error: err.message || "internal_error" });
   }
 });

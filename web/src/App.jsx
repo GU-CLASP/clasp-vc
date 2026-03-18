@@ -113,6 +113,7 @@ function parseBooleanAttr(value, fallback = true) {
 
 function buildParticipantList(room) {
   const local = room.localParticipant;
+  const localAdmissionStatus = local?.attributes?.admissionStatus || "pending";
   const remotes = Array.from(room.remoteParticipants.values());
 
   const relays = new Map();
@@ -141,9 +142,16 @@ function buildParticipantList(room) {
     });
   }
 
+  if (localAdmissionStatus !== "admitted") {
+    return list;
+  }
+
   const usedRelays = new Set();
 
   for (const [id, original] of originals.entries()) {
+    if ((original?.attributes?.admissionStatus || "pending") !== "admitted") {
+      continue;
+    }
     const relay = relays.get(id);
     const originalHasVideo = hasSubscribedVideo(original);
     const shouldUseRelay = relay && id !== local.identity && !originalHasVideo;
@@ -170,6 +178,7 @@ function buildParticipantList(room) {
   for (const [id, relay] of relays.entries()) {
     if (originals.has(id) || usedRelays.has(id)) continue;
     if (id === local.identity) continue;
+    if ((relay?.attributes?.admissionStatus || "pending") !== "admitted") continue;
     list.push({
       key: `fx:${relay.identity}`,
       participant: relay,
@@ -252,6 +261,8 @@ export default function App() {
         token,
         room: roomName,
         identity: `p_${Math.random().toString(36).substr(2, 9)}`,
+        role: "moderator",
+        admissionStatus: "admitted",
       });
       return;
     }
@@ -429,8 +440,8 @@ export default function App() {
 
     (async () => {
       try {
-        // IMPORTANT: autoSubscribe must be true to see other participants
-        await room.connect(conn.url, conn.token, { autoSubscribe: true });
+        const shouldAutoSubscribe = conn?.role !== "participant";
+        await room.connect(conn.url, conn.token, { autoSubscribe: shouldAutoSubscribe });
         if (cancelled) return;
         setStatus("connected");
         forceRender();
@@ -543,6 +554,7 @@ export default function App() {
   }
 
   const room = roomRef.current;
+  const localAdmissionStatus = room?.localParticipant?.attributes?.admissionStatus || conn?.admissionStatus || "pending";
   const participants = room ? buildParticipantList(room) : [];
 
   return (
@@ -561,6 +573,12 @@ export default function App() {
           </>
         ) : null}
       </div>
+
+      {localAdmissionStatus !== "admitted" ? (
+        <div style={{ marginBottom: 10, padding: 10, background: "#fff7df", color: "#6b4f00", borderRadius: 6 }}>
+          Waiting for admission. Your camera and microphone are live for admins, but you can only see yourself until you are admitted.
+        </div>
+      ) : null}
 
       {err ? <div style={{ color: "crimson", marginBottom: 10 }}>{err}</div> : null}
 
@@ -584,6 +602,14 @@ export default function App() {
               room && p.participant.identity === room.localParticipant.identity
                 ? localTracksRef.current.video
                 : null
+            }
+            overrideAudioTrack={
+              room && p.participant.identity === room.localParticipant.identity
+                ? localTracksRef.current.audio
+                : null
+            }
+            muteAudioPlayback={
+              room && p.participant.identity === room.localParticipant.identity
             }
           />
         ))}

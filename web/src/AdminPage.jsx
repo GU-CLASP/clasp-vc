@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
 import {
+  admitParticipant,
   getRoom,
   getParticipants,
   removeParticipant,
@@ -34,6 +35,9 @@ export default function AdminPage() {
   const [delayValues, setDelayValues] = useState({});
   const realParticipants = participants.filter(
     (p) => p?.identity && p.identity.startsWith("p_")
+  );
+  const participantMetaByIdentity = new Map(
+    realParticipants.map((participant) => [participant.identity, participant])
   );
 
   useEffect(() => {
@@ -229,6 +233,25 @@ export default function AdminPage() {
       refreshDelayEffects();
     } catch (e) {
       appendError(`remove participant failed: ${e?.message || e}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAdmitParticipant(identity) {
+    if (!selectedRoom) return;
+    if (serverOffline) {
+      appendError("admit participant failed: server appears offline");
+      return;
+    }
+    setLoading(true);
+    try {
+      await admitParticipant(selectedRoom, identity);
+      setSuccess(`Admitted ${identity}`);
+      setTimeout(() => setSuccess(""), 3000);
+      refreshParticipants();
+    } catch (e) {
+      appendError(`admit participant failed: ${e?.message || e}`);
     } finally {
       setLoading(false);
     }
@@ -494,6 +517,8 @@ export default function AdminPage() {
               <CompositePreview
                 conn={previewConn}
                 delayEffects={delayEffects}
+                participantMetaByIdentity={participantMetaByIdentity}
+                onAdmit={handleAdmitParticipant}
                 onDisconnect={() => {
                   setPreviewConn(null);
                   setPreviewError("Preview disconnected, retrying...");
@@ -659,7 +684,7 @@ function attachTrack(el, track) {
   return attachedEl;
 }
 
-function CompositePreview({ conn, delayEffects, onDisconnect }) {
+function CompositePreview({ conn, delayEffects, participantMetaByIdentity, onAdmit, onDisconnect }) {
   const roomRef = useRef(null);
   const [, bump] = useState(0);
 
@@ -723,6 +748,8 @@ function CompositePreview({ conn, delayEffects, onDisconnect }) {
             participant={p.participant}
             displayName={p.displayName}
             displayIdentity={p.displayIdentity}
+            meta={participantMetaByIdentity?.get(p.displayIdentity)}
+            onAdmit={onAdmit}
           />
         ))
       )}
@@ -730,7 +757,7 @@ function CompositePreview({ conn, delayEffects, onDisconnect }) {
   );
 }
 
-function PreviewTile({ participant, displayName, displayIdentity }) {
+function PreviewTile({ participant, displayName, displayIdentity, meta, onAdmit }) {
   const videoRef = useRef(null);
   const audioRef = useRef(null);
   const tracks = Array.from(participant.trackPublications.values());
@@ -740,6 +767,7 @@ function PreviewTile({ participant, displayName, displayIdentity }) {
   const audioPub = tracks.find(
     (t) => t.kind === Track.Kind.Audio && t.track && t.isSubscribed
   );
+  const admissionStatus = meta?.admissionStatus || "pending";
 
   useEffect(() => {
     const el = videoRef.current;
@@ -805,6 +833,27 @@ function PreviewTile({ participant, displayName, displayIdentity }) {
         />
       </div>
       <audio ref={audioRef} />
+      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
+        {admissionStatus === "admitted" ? "Admitted" : "Waiting"}
+      </div>
+      {admissionStatus !== "admitted" ? (
+        <button
+          onClick={() => onAdmit?.(displayIdentity || participant.identity)}
+          style={{
+            marginTop: 8,
+            padding: "6px 10px",
+            backgroundColor: "#4CAF50",
+            color: "white",
+            border: "none",
+            borderRadius: 4,
+            cursor: "pointer",
+            fontSize: 12,
+            fontWeight: "bold",
+          }}
+        >
+          Admit
+        </button>
+      ) : null}
     </div>
   );
 }
