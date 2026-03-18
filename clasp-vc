@@ -242,6 +242,11 @@ if __name__ == "__main__":
         raise SystemExit(1)
     elif sys.argv[1] == "down" or sys.argv[1] == "stop":
         raise SystemExit(do_down())
+    elif sys.argv[1] == "restart":
+        result = do_down()
+        if result != 0:
+            raise SystemExit(result)
+        raise SystemExit(do_up())
     elif sys.argv[1] == "status":
         raise SystemExit(do_status())
     elif sys.argv[1] == "up" or sys.argv[1] == "start":
