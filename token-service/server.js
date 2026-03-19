@@ -196,28 +196,84 @@ function scheduleApplyParticipantSessionState(room, identity, attempts = 20, del
   });
 }
 
-async function syncAdmittedSubscriptions(room) {
-  const participants = await roomService.listParticipants(room);
+function shouldSubscribeToTracks(p) {
+  const hasAdmittedProperty = identitySessions.get(p.identity)?.admissionStatus === "admitted";
+  const isEffect = p.identity.startsWith("fx_");
+  return hasAdmittedProperty || isEffect
+}
+
+async function logAllTracks(room) {
+  console.log("LOGALLTRACKS");
+  const participantInfos = await roomService.listParticipants(room.name);
+  for (let p of participantInfos) {
+    console.log(`Participant ${p.identity} (${p.name}): ((${p.sid}))`);
+    console.log(`- Attributes: ${JSON.stringify(p.attributes)}`);
+    console.log(`- Kind: ${p.kind}`);
+    console.log(`- Track ids: ${p.tracks.map((tr) => `${tr.sid} ${tr.type} ${tr.name}`)}`);
+    console.log(`- Permissions: ${JSON.stringify(p.permission)}`);
+  }
+}
+
+async function syncAdmittedSubscriptions(roomName) {
+  const rooms = await roomService.listRooms([roomName]);
+  const room = rooms[0];
+  await logAllTracks(room);
+  const participants = await roomService.listParticipants(roomName);
   const connected = participants.filter((p) => isRecordableParticipant(p.identity));
-  const admitted = connected.filter(
-    (p) => identitySessions.get(p.identity)?.admissionStatus === "admitted"
-  );
+  const admitted = connected.filter((p) => shouldSubscribeToTracks(p));
   const pendingTrackSids = connected
     .filter((p) => identitySessions.get(p.identity)?.admissionStatus !== "admitted")
     .flatMap((p) => (p.tracks || []).map((t) => t.sid).filter(Boolean));
+
+  // Need to check if everyone is in room with the right status when this code runs...
+  console.log(`syncAdmittedSubscriptions, participants: ${participants.map(p => p.identity)}`);
+  console.log(`syncAdmittedSubscriptions, connected: ${connected.map(p => p.identity)}`);
+  console.log(`syncAdmittedSubscriptions, admitted: ${admitted.map(p => p.identity)}`);
+  console.log(`syncAdmittedSubscriptions, pendingTrackSids: ${pendingTrackSids}`);
 
   for (const participant of admitted) {
     const subscribeTrackSids = admitted
       .filter((other) => other.identity !== participant.identity)
       .flatMap((other) => (other.tracks || []).map((t) => t.sid).filter(Boolean));
+    console.log(`syncAdmittedSubscriptions, subscribeTrackSids for ${participant.identity}: ${subscribeTrackSids}`);
 
     if (subscribeTrackSids.length > 0) {
-      await roomService.updateSubscriptions(room, participant.identity, subscribeTrackSids, true);
+      console.log(`syncAdmittedSubscriptions. updateSubscriptions ${participant.name} ${participant.identity} ${subscribeTrackSids} true`);
+      await roomService.updateSubscriptions(roomName, participant.identity, subscribeTrackSids, true);
     }
     if (pendingTrackSids.length > 0) {
-      await roomService.updateSubscriptions(room, participant.identity, pendingTrackSids, false);
+      console.log(`syncAdmittedSubscriptions. updateSubscriptions ${participant.name} ${participant.identity} ${pendingTrackSids} false`);
+      await roomService.updateSubscriptions(roomName, participant.identity, pendingTrackSids, false);
     }
   }
+}
+
+function scheduleSync(room, identity, session) {
+  const attempts = 10;
+  const delayMs = 500;
+
+  const run = async (remaining) => {
+    try {
+      console.log(`scheduleSync attempt #${remaining}`);
+      await applyParticipantSessionState(room, identity);
+      if (session.admissionStatus === "admitted") {
+        await syncAdmittedSubscriptions(room);
+      }
+    } catch (err) {
+      console.warn("scheduleSync error inner:", err?.message || err);
+    }
+    if (remaining <= 1) return;
+    const timeoutId = setTimeout(() => {
+      run(remaining - 1).catch((err) => {
+        console.warn("scheduleSync retry error:", err?.message || err);
+      });
+    }, delayMs);
+    timeoutId.unref?.();
+  };
+
+  run(attempts).catch((err) => {
+    console.warn("scheduleSync error:", err?.message || err);
+  });
 }
 
 function scheduleSyncAdmittedSubscriptions(room, attempts = 6, delayMs = 500) {
@@ -551,10 +607,7 @@ app.post("/api/connection-details", async (req, res) => {
       name: displayName ?? session.name,
       showSelf,
     });
-    scheduleApplyParticipantSessionState(inv.room, identity);
-    if (session.admissionStatus === "admitted") {
-      scheduleSyncAdmittedSubscriptions(inv.room);
-    }
+    scheduleSync(inv.room, identity, session);
 
     try {
       const existingDelay = await getExistingDelay(inv.room, identity);
@@ -1306,8 +1359,10 @@ app.post("/api/admin/rooms/:roomName/participants/:identity/admit", requireAdmin
     session.admissionStatus = "admitted";
     identitySessions.set(identity, session);
 
-    scheduleApplyParticipantSessionState(roomName, identity);
-    scheduleSyncAdmittedSubscriptions(roomName);
+    console.log(`Admit ${identity} into room ${roomName}`);
+    await applyParticipantSessionState(roomName, identity);
+    console.log(`Sync subscriptions in room ${roomName}`);
+    await syncAdmittedSubscriptions(roomName);
 
     res.json({
       success: true,

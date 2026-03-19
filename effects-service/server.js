@@ -425,7 +425,7 @@ class DelayEffectSession {
         if (!isSubscriberParticipant(info, this.participant)) return;
         if (this.trackSids.size === 0) return;
         try {
-          console.log(`Updating subscriptions for ${this.toString()}: ${this.trackSids} --> false (ParticipantConnected)`);
+          console.log(`Updating subscriptions for ${this.toString()} ${participant.name}: ${this.trackSids} --> false (ParticipantConnected)`);
           await this.roomService.updateSubscriptions(
             this.roomName,
             participant.identity,
@@ -448,7 +448,7 @@ class DelayEffectSession {
         };
         const shouldUnsubscribe = isSubscriberParticipant(info, this.participant);
         try {
-          console.log(`Updating subscriptions for ${this.toString()}: ${this.trackSids} --> ${!shouldUnsubscribe} (ParticipantAttributesChanged)`);
+          console.log(`Updating subscriptions for ${this.toString()} ${participant.name}: ${this.trackSids} --> ${!shouldUnsubscribe} (ParticipantAttributesChanged)`);
           await this.roomService.updateSubscriptions(
             this.roomName,
             participant.identity,
@@ -521,7 +521,7 @@ class DelayEffectSession {
       for (const p of participants) {
         if (!isSubscriberParticipant(p, this.participant)) continue;
         try {
-          console.log(`${this.toString()}: apply unsubscribe - updateSubscriptions: ${p.identity} ${trackSids} false`);
+          console.log(`${this.toString()}: apply unsubscribe - updateSubscriptions: ${p.name} ${p.identity} ${trackSids} false`);
           await this.roomService.updateSubscriptions(
             this.roomName,
             p.identity,
@@ -547,7 +547,7 @@ class DelayEffectSession {
       for (const p of participants) {
         if (!isSubscriberParticipant(p, this.participant)) continue;
         try {
-          console.log(`${this.toString()}: apply resubscribe - updateSubscriptions: ${p.identity} ${trackSids} true`);
+          console.log(`${this.toString()}: apply resubscribe - updateSubscriptions: ${p.name} ${p.identity} ${trackSids} true`);
           await this.roomService.updateSubscriptions(
             this.roomName,
             p.identity,
