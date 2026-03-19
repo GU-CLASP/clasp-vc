@@ -135,7 +135,7 @@ app.get("/healthz", (_req, res) => {
  */
 app.post("/effects/delay", requireAdmin, async (req, res) => {
   const started = Date.now();
-  log("[effects-service] POST /effects/delay", req.body || {});
+  log(`[effects-service] POST /effects/delay ${req.body || {}}`);
   try {
     const { room, participant, delayMs, keepAlive, participantName } = req.body || {};
     if (!room || !participant) {
@@ -430,7 +430,7 @@ class DelayEffectSession {
         if (!isSubscriberParticipant(info, this.participant)) return;
         if (this.trackSids.size === 0) return;
         try {
-          log(`Updating subscriptions for ${this.toString()} ${participant.name}: ${this.trackSids} --> false (ParticipantConnected)`);
+          log(`Updating subscriptions for ${this.toString()} ${participant.name}: ${Array.from(this.trackSids)} --> false (ParticipantConnected)`);
           await this.roomService.updateSubscriptions(
             this.roomName,
             participant.identity,
@@ -453,7 +453,7 @@ class DelayEffectSession {
         };
         const shouldUnsubscribe = isSubscriberParticipant(info, this.participant);
         try {
-          log(`Updating subscriptions for ${this.toString()} ${participant.name}: ${this.trackSids} --> ${!shouldUnsubscribe} (ParticipantAttributesChanged)`);
+          log(`Updating subscriptions for ${this.toString()} ${participant.name}: ${Array.from(this.trackSids)} --> ${!shouldUnsubscribe} (ParticipantAttributesChanged)`);
           await this.roomService.updateSubscriptions(
             this.roomName,
             participant.identity,
