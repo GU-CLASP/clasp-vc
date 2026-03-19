@@ -2,9 +2,16 @@
   "name": "token-service",
   "private": true,
   "type": "module",
+  "scripts": {
+    "lint": "eslint ."
+  },
   "dependencies": {
+    "@eslint/js": "^10.0.1",
+    "@livekit/rtc-node": "^0.13.18",
     "cors": "^2.8.5",
+    "eslint": "^10.0.3",
     "express": "^4.19.2",
+    "globals": "^17.4.0",
     "livekit-server-sdk": "^2.15.0"
   }
 }
