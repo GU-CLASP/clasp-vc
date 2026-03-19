@@ -48,6 +48,11 @@ app.use((req, _res, next) => {
   next();
 });
 
+function log(message) {
+  let timestamp = new Date().toISOString();
+  console.log(`${timestamp} ${message}`);
+}
+
 const PORT = Number(process.env.PORT || 9000);
 const LIVEKIT_URL = mustEnv("LIVEKIT_URL");
 const LIVEKIT_URL_INTERNAL = process.env.LIVEKIT_URL_INTERNAL || LIVEKIT_URL;
@@ -203,14 +208,14 @@ function shouldSubscribeToTracks(p) {
 }
 
 async function logAllTracks(room) {
-  console.log("LOGALLTRACKS");
+  log("LOGALLTRACKS");
   const participantInfos = await roomService.listParticipants(room.name);
   for (let p of participantInfos) {
-    console.log(`Participant ${p.identity} (${p.name}): ((${p.sid}))`);
-    console.log(`- Attributes: ${JSON.stringify(p.attributes)}`);
-    console.log(`- Kind: ${p.kind}`);
-    console.log(`- Track ids: ${p.tracks.map((tr) => `${tr.sid} ${tr.type} ${tr.name}`)}`);
-    console.log(`- Permissions: ${JSON.stringify(p.permission)}`);
+    log(`Participant ${p.identity} (${p.name}): ((${p.sid}))`);
+    log(`- Attributes: ${JSON.stringify(p.attributes)}`);
+    log(`- Kind: ${p.kind}`);
+    log(`- Track ids: ${p.tracks.map((tr) => `${tr.sid} ${tr.type} ${tr.name}`)}`);
+    log(`- Permissions: ${JSON.stringify(p.permission)}`);
   }
 }
 
@@ -226,23 +231,23 @@ async function syncAdmittedSubscriptions(roomName) {
     .flatMap((p) => (p.tracks || []).map((t) => t.sid).filter(Boolean));
 
   // Need to check if everyone is in room with the right status when this code runs...
-  console.log(`syncAdmittedSubscriptions, participants: ${participants.map(p => p.identity)}`);
-  console.log(`syncAdmittedSubscriptions, connected: ${connected.map(p => p.identity)}`);
-  console.log(`syncAdmittedSubscriptions, admitted: ${admitted.map(p => p.identity)}`);
-  console.log(`syncAdmittedSubscriptions, pendingTrackSids: ${pendingTrackSids}`);
+  log(`syncAdmittedSubscriptions, participants: ${participants.map(p => p.identity)}`);
+  log(`syncAdmittedSubscriptions, connected: ${connected.map(p => p.identity)}`);
+  log(`syncAdmittedSubscriptions, admitted: ${admitted.map(p => p.identity)}`);
+  log(`syncAdmittedSubscriptions, pendingTrackSids: ${pendingTrackSids}`);
 
   for (const participant of admitted) {
     const subscribeTrackSids = admitted
       .filter((other) => other.identity !== participant.identity)
       .flatMap((other) => (other.tracks || []).map((t) => t.sid).filter(Boolean));
-    console.log(`syncAdmittedSubscriptions, subscribeTrackSids for ${participant.identity}: ${subscribeTrackSids}`);
+    log(`syncAdmittedSubscriptions, subscribeTrackSids for ${participant.identity}: ${subscribeTrackSids}`);
 
     if (subscribeTrackSids.length > 0) {
-      console.log(`syncAdmittedSubscriptions. updateSubscriptions ${participant.name} ${participant.identity} ${subscribeTrackSids} true`);
+      log(`syncAdmittedSubscriptions. updateSubscriptions ${participant.name} ${participant.identity} ${subscribeTrackSids} true`);
       await roomService.updateSubscriptions(roomName, participant.identity, subscribeTrackSids, true);
     }
     if (pendingTrackSids.length > 0) {
-      console.log(`syncAdmittedSubscriptions. updateSubscriptions ${participant.name} ${participant.identity} ${pendingTrackSids} false`);
+      log(`syncAdmittedSubscriptions. updateSubscriptions ${participant.name} ${participant.identity} ${pendingTrackSids} false`);
       await roomService.updateSubscriptions(roomName, participant.identity, pendingTrackSids, false);
     }
   }
@@ -254,7 +259,7 @@ function scheduleSync(room, identity, session) {
 
   const run = async (remaining) => {
     try {
-      console.log(`scheduleSync attempt #${remaining}`);
+      log(`scheduleSync attempt #${remaining}`);
       await applyParticipantSessionState(room, identity);
       if (session.admissionStatus === "admitted") {
         await syncAdmittedSubscriptions(room);
@@ -334,7 +339,7 @@ async function effectsServiceRequest(pathname, options = {}) {
     console.error(`[effects-service] ${options.method || "GET"} ${pathname} -> ${res.status} (${ms}ms): ${t}`);
     throw new Error(`effects-service failed: ${res.status} ${t}`);
   }
-  console.log(`[effects-service] ${options.method || "GET"} ${pathname} -> ${res.status} (${ms}ms)`);
+  log(`[effects-service] ${options.method || "GET"} ${pathname} -> ${res.status} (${ms}ms)`);
   return res.json();
 }
 
@@ -865,7 +870,7 @@ app.post("/api/admin/recording/start", requireAdmin, async (req, res) => {
       participants: mode === "individual" ? participantSet : undefined,
     };
 
-    console.log(
+    log(
       `Recording started for room ${room}, mode: ${mode}, recordingId: ${recordingId}, egressIds: ${egressIds.join(", ")}`
     );
 
@@ -952,7 +957,7 @@ app.post("/api/admin/recording/stop", requireAdmin, async (req, res) => {
     const delayedCleanup = setTimeout(() => cleanupEgressJson(room), 5000);
     delayedCleanup.unref?.();
 
-    console.log(`Recording stopped for room ${room}, mode: ${mode || "all"}`);
+    log(`Recording stopped for room ${room}, mode: ${mode || "all"}`);
 
     res.json({
       success: true,
@@ -1056,7 +1061,7 @@ app.post("/api/admin/effects/delay", requireAdmin, async (req, res) => {
       }),
     });
 
-    console.log(`Delay effect set for ${participant} in room ${room}: ${delay}ms`);
+    log(`Delay effect set for ${participant} in room ${room}: ${delay}ms`);
     res.json(payload);
   } catch (err) {
     console.error("effects/delay error:", err);
@@ -1359,9 +1364,9 @@ app.post("/api/admin/rooms/:roomName/participants/:identity/admit", requireAdmin
     session.admissionStatus = "admitted";
     identitySessions.set(identity, session);
 
-    console.log(`Admit ${identity} into room ${roomName}`);
+    log(`Admit ${identity} into room ${roomName}`);
     await applyParticipantSessionState(roomName, identity);
-    console.log(`Sync subscriptions in room ${roomName}`);
+    log(`Sync subscriptions in room ${roomName}`);
     await syncAdmittedSubscriptions(roomName);
 
     res.json({
@@ -1425,5 +1430,5 @@ app.post("/api/admin/preview-token", requireAdmin, async (req, res) => {
 
 
 app.listen(PORT, () => {
-  console.log(`token-service listening on http://127.0.0.1:${PORT}`);
+  log(`token-service listening on http://127.0.0.1:${PORT}`);
 });
