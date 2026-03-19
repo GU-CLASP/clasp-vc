@@ -39,8 +39,6 @@ services:
   token-service:
     image: docker.io/node:20-alpine
     network_mode: "host"
-    depends_on:
-      - effects-service
     working_dir: /app
     volumes:
       - ./token-service:/app:Z
@@ -62,7 +60,6 @@ services:
       - INVITE_MAX_USES=${INVITE_MAX_USES:-0}
       - RECORDINGS_DIR=/app/recordings
       - EGRESS_FILE_BASE=/out/recordings
-      - EFFECTS_SERVICE_URL=http://127.0.0.1:9100
     logging:
       driver: k8s-file
 
@@ -84,25 +81,3 @@ services:
       - NODE_ENV=development
       - VITE_BASE_PATH=${VITE_BASE_PATH}
       - VITE_ALLOWED_HOSTS=${VITE_ALLOWED_HOSTS}
-
-  effects-service:
-    image: docker.io/node:20-bullseye
-    network_mode: "host"
-    working_dir: /app
-    volumes:
-      - ./effects-service:/app:Z
-      - ./data/logs/effects-service:/var/log/effects-service:z
-    command: >
-      sh -lc "mkdir -p /var/log/effects-service &&
-      logfile=/var/log/effects-service/effects-service-$$(date +%Y%m%d-%H%M%S).log &&
-      apt-get update && apt-get install -y libpulse0 &&
-      npm install && node server.js 2>&1 | tee -a \"$$logfile\""
-    environment:
-      - PORT=9100
-      - LIVEKIT_URL=${LIVEKIT_URL}
-      - LIVEKIT_URL_INTERNAL=${LIVEKIT_URL_INTERNAL}
-      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
-      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
-      - ADMIN_KEY=${ADMIN_KEY}
-    logging:
-      driver: k8s-file

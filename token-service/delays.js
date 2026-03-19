@@ -1,9 +1,5 @@
-import express from "express";
-import cors from "cors";
-import {
-  AccessToken,
-  RoomServiceClient,
-} from "livekit-server-sdk";
+import { app } from "./express";
+import { AccessToken } from "livekit-server-sdk";
 import {
   AudioFrame,
   AudioSource,
@@ -19,41 +15,47 @@ import {
   VideoSource,
   VideoStream,
 } from "@livekit/rtc-node";
+import { log, requireAdmin } from "./utils";
+import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL_INTERNAL, roomService } from "./livekit-api";
 
-const app = express();
-app.use(express.json());
-app.use(cors({ origin: true }));
-app.use((req, _res, next) => {
-  let timestamp = new Date().toISOString();
-  console.log(`${timestamp} ${req.method} ${req.path}`);
-  next();
-});
-
-function log(message) {
-  let timestamp = new Date().toISOString();
-  console.log(`${timestamp} ${message}`);
+async function effectsServiceRequest(pathname, options = {}) {
+  const url = `${EFFECTS_SERVICE_URL}${pathname}`;
+  const headers = {
+    "content-type": "application/json",
+    "x-admin-key": ADMIN_KEY,
+    ...(options.headers || {}),
+  };
+  const started = Date.now();
+  let res;
+  try {
+    res = await fetchWithTimeout(url, { ...options, headers }, 5000);
+  } catch (err) {
+    const ms = Date.now() - started;
+    console.error(`[effects-service] ${options.method || "GET"} ${pathname} -> network error (${ms}ms):`, err?.message || err);
+    throw new Error(`effects-service request failed: ${err?.message || err}`);
+  }
+  const ms = Date.now() - started;
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    console.error(`[effects-service] ${options.method || "GET"} ${pathname} -> ${res.status} (${ms}ms): ${t}`);
+    throw new Error(`effects-service failed: ${res.status} ${t}`);
+  }
+  log(`[effects-service] ${options.method || "GET"} ${pathname} -> ${res.status} (${ms}ms)`);
+  return res.json();
 }
 
-process.on("unhandledRejection", (reason) => {
-  console.error("unhandledRejection:", reason);
-});
+export function getExistingDelay(room, participant) {
+  if (!room || !participant) return 0;
+  try {
+    const payload = getCurrentDelays(room);
+    const value = Number(payload?.delays?.[participant] ?? 0);
+    return Number.isFinite(value) ? value : 0;
+  } catch (err) {
+    console.warn("getExistingDelay failed:", err?.message || err);
+    return -1;
+  }
+}
 
-process.on("uncaughtException", (err) => {
-  console.error("uncaughtException:", err);
-});
-
-const PORT = Number(process.env.PORT || 9100);
-const LIVEKIT_URL = mustEnv("LIVEKIT_URL");
-const LIVEKIT_URL_INTERNAL = process.env.LIVEKIT_URL_INTERNAL || LIVEKIT_URL;
-const LIVEKIT_API_KEY = mustEnv("LIVEKIT_API_KEY");
-const LIVEKIT_API_SECRET = mustEnv("LIVEKIT_API_SECRET");
-const ADMIN_KEY = mustEnv("ADMIN_KEY");
-
-const roomService = new RoomServiceClient(
-  toHttpUrl(LIVEKIT_URL_INTERNAL),
-  LIVEKIT_API_KEY,
-  LIVEKIT_API_SECRET
-);
 
 // room -> Map(participantIdentity -> DelayEffectSession)
 const roomEffects = new Map();
@@ -70,22 +72,6 @@ function myTimeout(func, delay) {
   } else {
     setTimeout(func, delay);
   }
-}
-
-function mustEnv(name) {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing env var: ${name}`);
-  return v;
-}
-
-function toHttpUrl(wsUrl) {
-  return wsUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:");
-}
-
-function requireAdmin(req, res, next) {
-  const key = req.header("x-admin-key");
-  if (!key || key !== ADMIN_KEY) return res.status(401).json({ error: "unauthorized" });
-  next();
 }
 
 function effectIdentityFor(participant) {
@@ -124,10 +110,6 @@ function getEffectMap(room) {
   }
   return roomEffects.get(room);
 }
-
-app.get("/healthz", (_req, res) => {
-  res.json({ status: "ok" });
-});
 
 /**
  * POST /effects/delay
@@ -243,34 +225,16 @@ app.post("/effects/delay/remove", requireAdmin, async (req, res) => {
   }
 });
 
-/**
- * GET /effects/delay/status?room=roomName
- */
-app.get("/effects/delay/status", requireAdmin, async (req, res) => {
-  const started = Date.now();
-  try {
-    const { room } = req.query;
-    if (!room) return res.status(400).json({ error: "missing room query param" });
-
-    const effectSessions = roomEffects.get(String(room));
-    const delays = {};
-    if (effectSessions) {
-      for (const [participant, effectSession] of effectSessions.entries()) {
-        delays[participant] = effectSession.delayMs;
-      }
+export function getCurrentDelays(roomName) {
+  const effectSessions = roomEffects.get(String(roomName));
+  const delays = {};
+  if (effectSessions) {
+    for (const [participant, effectSession] of effectSessions.entries()) {
+      delays[participant] = effectSession.delayMs;
     }
-    log(`[effects-service] GET /effects/delay/status -> 200 (${Date.now() - started}ms)`);
-    res.json({ room: String(room), delays });
-  } catch (err) {
-    console.error("effects/delay/status error:", err);
-    console.error(`[effects-service] GET /effects/delay/status -> 500 (${Date.now() - started}ms)`);
-    res.status(500).json({ error: err.message || "internal_error" });
   }
-});
-
-app.listen(PORT, () => {
-  log(`effects-service listening on http://127.0.0.1:${PORT}`);
-});
+  return delays;
+}
 
 class DelayEffectSession {
   constructor({ room, participant, participantName, delayMs, livekitUrl, apiKey, apiSecret, roomService }) {
@@ -774,3 +738,65 @@ class DelayEffectSession {
   }
 
 }
+
+/**
+ * ADMIN: Set delay effect for a participant
+ * POST /api/admin/effects/delay
+ * headers: { x-admin-key: ADMIN_KEY }
+ * body: { room, participant, delayMs }
+ *
+ * returns: { success: true, room, participant, delayMs }
+ */
+app.post("/api/admin/effects/delay", requireAdmin, async (req, res) => {
+  try {
+    const { room, participant, delayMs } = req.body || {};
+    if (!room || !participant) {
+      return res.status(400).json({ error: "missing room or participant" });
+    }
+
+    const delay = Number(delayMs) || 0;
+    if (delay < 0 || delay > 10000) {
+      return res.status(400).json({ error: "delayMs must be between 0 and 10000" });
+    }
+
+    const session = identitySessions.get(participant);
+    const payload = await effectsServiceRequest("/effects/delay", {
+      method: "POST",
+      body: JSON.stringify({
+        room,
+        participant,
+        delayMs: delay,
+        keepAlive: true,
+        participantName: session?.name,
+      }),
+    });
+
+    log(`Delay effect set for ${participant} in room ${room}: ${delay}ms`);
+    res.json(payload);
+  } catch (err) {
+    console.error("effects/delay error:", err);
+    res.status(500).json({ error: err.message || "internal_error" });
+  }
+});
+
+/**
+ * ADMIN: Get delay effect status for a room
+ * GET /api/admin/effects/delay/status?room=roomName
+ * headers: { x-admin-key: ADMIN_KEY }
+ *
+ * returns: { room, delays: { participantName: delayMs, ... } }
+ */
+app.get("/api/admin/effects/delay/status", requireAdmin, async (req, res) => {
+  try {
+    const { room } = req.query;
+    if (!room) return res.status(400).json({ error: "missing room query param" });
+    const payload = getCurrentDelays(room);
+    res.json({
+      room: room,
+      delays: payload
+    });
+  } catch (err) {
+    console.error("effects/delay/status error:", err);
+    res.status(500).json({ error: err.message || "internal_error" });
+  }
+});
