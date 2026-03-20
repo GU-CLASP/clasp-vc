@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   Track,
 } from "livekit-client";
@@ -7,9 +7,7 @@ function attachTrack(el, track) {
   // livekit-client track.attach() returns the element it attached to
   // but we want to attach to our existing element.
   // Easiest: detach anything currently on it, then attach fresh.
-  try {
-    track.detach(); // detach from any prior elements
-  } catch {}
+  track.detach();
   const attachedEl = track.attach(el);
   // If attach() replaced element, we can copy attributes back,
   // but in practice with provided el this usually works.
@@ -50,11 +48,9 @@ export default function ParticipantCard({
       el.autoplay = true;
     } else {
       // Clear srcObject if any (some browsers)
-      try {
-        el.srcObject = null;
-      } catch {}
+      el.srcObject = null;
     }
-  }, [videoPub?.trackSid, videoPub?.track, overrideVideoTrack]);
+  }, [videoPub?.trackSid, videoPub?.track, overrideVideoTrack, displayName]);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -68,11 +64,9 @@ export default function ParticipantCard({
       el.playsInline = true;
       el.muted = muteAudioPlayback || displayIdentity === room?.localParticipant?.identity;
     } else {
-      try {
-        el.srcObject = null;
-      } catch {}
+      el.srcObject = null;
     }
-  }, [audioPub?.trackSid, audioPub?.track, overrideAudioTrack, muteAudioPlayback, displayIdentity, room]);
+  }, [audioPub?.trackSid, audioPub?.track, overrideAudioTrack, muteAudioPlayback, displayIdentity, room, displayName]);
 
   return (
     <div

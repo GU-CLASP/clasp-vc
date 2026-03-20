@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Room,
   RoomEvent,
@@ -11,6 +11,16 @@ import { getConnectionDetails, leaveSession } from "./api.js";
 import AdminPage from "./AdminPage.jsx";
 import RecordingView from "./RecordingView.jsx";
 import ParticipantCard from "./ParticipantCard.jsx";
+import {
+  stripBasePath,
+  parseBooleanAttr,
+  hasSubscribedVideo,
+  loadStoredSession,
+  clearStoredSession,
+  saveStoredSession,
+  isAdminPath,
+  isRecordingPath,
+} from "./app-utils.js";
 
 function parseInviteFromUrl() {
   const pathname = stripBasePath(window.location.pathname);
@@ -26,89 +36,6 @@ function parseInviteFromUrl() {
   const name = params.get("name");
 
   return { inviteId, key, adminKey, token, roomName, name };
-}
-
-const BASE_PATH = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-
-function stripBasePath(pathname) {
-  if (BASE_PATH && pathname.startsWith(BASE_PATH)) {
-    const next = pathname.slice(BASE_PATH.length);
-    return next.startsWith("/") ? next : `/${next}`;
-  }
-  return pathname;
-}
-
-const IDENTITY_STORAGE_PREFIX = "clasp_vc_identity:";
-
-function sessionKey(inviteId, key) {
-  if (!inviteId || !key) return null;
-  return `${IDENTITY_STORAGE_PREFIX}${inviteId}:${key}`;
-}
-
-function getIdentityStorage() {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
-function loadStoredSession(inviteId, key) {
-  const storage = getIdentityStorage();
-  const storageKey = sessionKey(inviteId, key);
-  if (!storage || !storageKey) return null;
-  try {
-    const raw = storage.getItem(storageKey);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveStoredSession(inviteId, key, data) {
-  const storage = getIdentityStorage();
-  const storageKey = sessionKey(inviteId, key);
-  if (!storage || !storageKey) return;
-  try {
-    storage.setItem(storageKey, JSON.stringify(data));
-  } catch {}
-}
-
-function clearStoredSession(inviteId, key) {
-  const storage = getIdentityStorage();
-  const storageKey = sessionKey(inviteId, key);
-  if (!storage || !storageKey) return;
-  try {
-    storage.removeItem(storageKey);
-  } catch {}
-}
-
-function isAdminPath() {
-  return stripBasePath(window.location.pathname).startsWith("/admin");
-}
-
-function isRecordingPath() {
-  return stripBasePath(window.location.pathname).startsWith("/recording");
-}
-
-function hasSubscribedVideo(participant) {
-  if (!participant) return false;
-  for (const pub of participant.trackPublications.values()) {
-    if (pub.kind === Track.Kind.Video && pub.track && pub.isSubscribed) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function parseBooleanAttr(value, fallback = true) {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (["true", "1", "yes", "on"].includes(normalized)) return true;
-    if (["false", "0", "no", "off"].includes(normalized)) return false;
-  }
-  return fallback;
 }
 
 function buildParticipantList(room) {
@@ -265,14 +192,18 @@ export default function App() {
     const { video, audio } = localTracksRef.current;
     try {
       video?.stop?.();
-    } catch {}
+    } catch (e) {
+      console.log("Unable to clear video track", e);
+    }
     try {
       audio?.stop?.();
-    } catch {}
+    } catch (e) {
+      console.log("Unable to clear audio track", e);
+    }
     localTracksRef.current = { video: null, audio: null };
   }
 
-  async function onJoin() {
+  const onJoin = useCallback(async () => {
     setAutoJoinBlocked(false);
     manualLeaveRef.current = false;
     setErr("");
@@ -328,7 +259,7 @@ export default function App() {
       setStatus("error");
       setErr(e?.message || "Join failed");
     }
-  }
+  }, [token, roomName, inviteId, key, name, savedIdentity]);
 
   async function onLeave() {
     manualLeaveRef.current = true;
@@ -365,7 +296,7 @@ export default function App() {
     if (token && roomName && !conn) {
       onJoin();
     }
-  }, [token, roomName, conn]);
+  }, [token, roomName, conn, onJoin]);
 
   useEffect(() => {
     let cancelled = false;
@@ -394,7 +325,7 @@ export default function App() {
     if (autoJoinBlocked) return;
     if (status !== "idle") return;
     onJoin();
-  }, [conn, inviteId, key, savedIdentity, status, autoJoinBlocked]);
+  }, [conn, inviteId, key, savedIdentity, status, autoJoinBlocked, onJoin]);
 
   // Connect + wire events when conn is set
   useEffect(() => {
@@ -532,7 +463,7 @@ export default function App() {
       clearLocalTracks();
       roomRef.current = null;
     };
-  }, [conn]);
+  }, [conn, inviteId, key]);
 
   if (!inviteId && !key && !token) {
     return (

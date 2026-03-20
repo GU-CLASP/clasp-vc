@@ -402,7 +402,7 @@ export default function AdminPage() {
             >
               <h3>Delay Effect Controls</h3>
               <p style={{ opacity: 0.7, fontSize: 13, marginBottom: 16 }}>
-                Add delay to participants' streams (other participants will experience the delay).
+                Add delay to participants&#39; streams (other participants will experience the delay).
               </p>
 
               {realParticipants.length === 0 ? (
@@ -726,7 +726,7 @@ function CompositePreview({ conn, delayEffects, participantMetaByIdentity, onAdm
       } catch {}
       roomRef.current = null;
     };
-  }, [conn?.url, conn?.token]);
+  }, [conn?.url, conn?.token, onDisconnect]);
 
   const room = roomRef.current;
   const participants = room ? buildPreviewParticipants(room, delayEffects) : [];
