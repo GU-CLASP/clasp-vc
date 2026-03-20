@@ -17,32 +17,7 @@ import {
 } from "@livekit/rtc-node";
 import { log, requireAdmin } from "./utils";
 import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL_INTERNAL, roomService } from "./livekit-api";
-
-async function effectsServiceRequest(pathname, options = {}) {
-  const url = `${EFFECTS_SERVICE_URL}${pathname}`;
-  const headers = {
-    "content-type": "application/json",
-    "x-admin-key": ADMIN_KEY,
-    ...(options.headers || {}),
-  };
-  const started = Date.now();
-  let res;
-  try {
-    res = await fetchWithTimeout(url, { ...options, headers }, 5000);
-  } catch (err) {
-    const ms = Date.now() - started;
-    console.error(`[effects-service] ${options.method || "GET"} ${pathname} -> network error (${ms}ms):`, err?.message || err);
-    throw new Error(`effects-service request failed: ${err?.message || err}`);
-  }
-  const ms = Date.now() - started;
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    console.error(`[effects-service] ${options.method || "GET"} ${pathname} -> ${res.status} (${ms}ms): ${t}`);
-    throw new Error(`effects-service failed: ${res.status} ${t}`);
-  }
-  log(`[effects-service] ${options.method || "GET"} ${pathname} -> ${res.status} (${ms}ms)`);
-  return res.json();
-}
+import { identitySessions } from "./identity-sessions";
 
 export function getExistingDelay(room, participant) {
   if (!room || !participant) return 0;
@@ -111,23 +86,17 @@ function getEffectMap(room) {
   return roomEffects.get(room);
 }
 
-/**
- * POST /effects/delay
- * body: { room, participant, delayMs, keepAlive?, participantName? }
- */
-app.post("/effects/delay", requireAdmin, async (req, res) => {
-  const started = Date.now();
-  log(`[effects-service] POST /effects/delay ${req.body || {}}`);
+export async function setParticipantDelay(request) {
   try {
-    const { room, participant, delayMs, keepAlive, participantName } = req.body || {};
+    const { room, participant, delayMs, keepAlive, participantName } = request || {};
     if (!room || !participant) {
       console.warn("[effects-service] POST /effects/delay -> 400 missing params");
-      return res.status(400).json({ error: "missing room or participant" });
+      throw "missing room or participant";
     }
 
     const delay = Number(delayMs) || 0;
     if (delay < 0 || delay > 10000) {
-      return res.status(400).json({ error: "delayMs must be between 0 and 10000" });
+      return "delayMs must be between 0 and 10000";
     }
 
     const effectSessions = getEffectMap(room);
@@ -152,9 +121,7 @@ app.post("/effects/delay", requireAdmin, async (req, res) => {
           await effectSession.start();
           effectSessions.set(participant, effectSession);
         }
-        const ms = Date.now() - started;
-        log(`[effects-service] POST /effects/delay -> 200 (${ms}ms) for participant ${participant} active=true`);
-        return res.json({ success: true, room, participant, delayMs: 0, active: true });
+        return { success: true, room, participant, delayMs: 0, active: true };
       }
 
       if (existing) {
@@ -162,17 +129,13 @@ app.post("/effects/delay", requireAdmin, async (req, res) => {
         effectSessions.delete(participant);
       }
       if (effectSessions.size === 0) roomEffects.delete(room);
-      const ms = Date.now() - started;
-      log(`[effects-service] POST /effects/delay -> 200 (${ms}ms) for participant ${participant} active=false`);
-      return res.json({ success: true, room, participant, delayMs: 0, active: false });
+      return { success: true, room, participant, delayMs: 0, active: false };
     }
 
     if (existing) {
       if (participantName) existing.setParticipantName(participantName);
       await existing.setDelay(delay);
-      const ms = Date.now() - started;
-      log(`[effects-service] POST /effects/delay -> 200 (${ms}ms) for participant ${participant} active=true`);
-      return res.json({ success: true, room, participant, delayMs: delay, active: true });
+      return { success: true, room, participant, delayMs: delay, active: true };
     }
 
     const effectSession = new DelayEffectSession({
@@ -188,42 +151,30 @@ app.post("/effects/delay", requireAdmin, async (req, res) => {
     await effectSession.start();
     effectSessions.set(participant, effectSession);
 
-    const ms = Date.now() - started;
-    log(`[effects-service] POST /effects/delay -> 200 (${ms}ms) for participant ${participant} active=true`);
-    res.json({ success: true, room, participant, delayMs: delay, active: true });
+    return { success: true, room, participant, delayMs: delay, active: true };
   } catch (err) {
     console.error("effects/delay start error:", err);
-    console.error(`[effects-service] POST /effects/delay -> 500 (${Date.now() - started}ms)`);
-    res.status(500).json({ error: err.message || "internal_error" });
+    throw "internal_error";
   }
-});
+}
 
-/**
- * POST /effects/delay/remove
- * body: { room, participant }
- */
-app.post("/effects/delay/remove", requireAdmin, async (req, res) => {
+export async function removeDelay(roomName, participantIdentity) {
   try {
-    const { room, participant } = req.body || {};
-    if (!room || !participant) {
-      return res.status(400).json({ error: "missing room or participant" });
-    }
-
-    const effectSessions = roomEffects.get(room);
-    const existing = effectSessions?.get(participant);
+    const effectSessions = roomEffects.get(roomName);
+    const existing = effectSessions?.get(participantIdentity);
     if (existing) {
       await existing.stop();
-      effectSessions.delete(participant);
+      effectSessions.delete(participantIdentity);
     }
-    if (effectSessions && effectSessions.size === 0) roomEffects.delete(room);
+    if (effectSessions && effectSessions.size === 0) roomEffects.delete(roomName);
 
-    log(`[effects-service] POST /effects/delay/remove -> 200 for participant ${participant}`);
-    res.json({ success: true, room, participant });
+    log(`[effects-service] POST /effects/delay/remove -> 200 for participant ${participantIdentity}`);
+    return true;
   } catch (err) {
-    console.error("effects/delay remove error:", err);
-    res.status(500).json({ error: err.message || "internal_error" });
+    console.error("removeDelay error:", err);
+    return false;
   }
-});
+}
 
 export function getCurrentDelays(roomName) {
   const effectSessions = roomEffects.get(String(roomName));
@@ -760,15 +711,13 @@ app.post("/api/admin/effects/delay", requireAdmin, async (req, res) => {
     }
 
     const session = identitySessions.get(participant);
-    const payload = await effectsServiceRequest("/effects/delay", {
-      method: "POST",
-      body: JSON.stringify({
-        room,
-        participant,
-        delayMs: delay,
-        keepAlive: true,
-        participantName: session?.name,
-      }),
+
+    const payload = setParticipantDelay({
+      room,
+      participant,
+      delayMs: delay,
+      keepAlive: true,
+      participantName: session?.name,
     });
 
     log(`Delay effect set for ${participant} in room ${room}: ${delay}ms`);

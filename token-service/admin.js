@@ -2,9 +2,11 @@ import { app } from "./express.js";
 import {
   AccessToken,
 } from "livekit-server-sdk";
-import { requireAdmin } from "./utils.js";
-import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL, roomService } from "./livekit-api.js";
-
+import { requireAdmin, randomId, toWsUrl, parseBooleanAttr } from "./utils.js";
+import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL, DEFAULT_ROOM_NAME, roomService } from "./livekit-api.js";
+import { identitySessions } from "./identity-sessions.js";
+import { removeDelay } from "./delays.js";
+import { isRecordableParticipant } from "./subscription-logic.js"
 
 /**
  * ADMIN: Service health
@@ -13,30 +15,14 @@ import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL, roomService } from ".
  */
 app.get("/api/admin/health", requireAdmin, async (_req, res) => {
   const health = {
-    effectsService: { ok: false, error: null, ms: null },
     livekit: { ok: false, error: null },
   };
-
-  const start = Date.now();
-  try {
-    const r = await fetchWithTimeout(`${EFFECTS_SERVICE_URL}/healthz`, {}, 3000);
-    health.effectsService.ok = r.ok;
-    if (!r.ok) {
-      health.effectsService.error = `status ${r.status}`;
-    }
-  } catch (err) {
-    health.effectsService.error = err?.message || String(err);
-  } finally {
-    health.effectsService.ms = Date.now() - start;
-  }
-
   try {
     await roomService.listRooms();
     health.livekit.ok = true;
   } catch (err) {
     health.livekit.error = err?.message || String(err);
   }
-
   res.json(health);
 });
 
@@ -248,16 +234,13 @@ app.post("/api/admin/rooms/:roomName/participants/:identity/remove", requireAdmi
     }
 
     try {
-      await effectsServiceRequest("/effects/delay/remove", {
-        method: "POST",
-        body: JSON.stringify({ room: roomName, participant: identity }),
-      });
+      const success = removeDelay(roomName, identity);
+      res.json({ success: success, room: roomName, identity });
     } catch (err) {
       console.warn("admin/effects remove error:", err.message || err);
+      res.json({ success: false, room: roomName, identity });
     }
-
     identitySessions.delete(identity);
-    res.json({ success: true, room: roomName, identity });
   } catch (err) {
     console.error("admin/removeParticipant error:", err.message || err);
     res.status(500).json({ error: err.message || "internal_error" });

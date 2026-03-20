@@ -1,4 +1,7 @@
 import { app } from "./express";
+import { roomService } from "./livekit-api";
+import { requireAdmin } from "./utils";
+import { identitySessions } from "./identity-sessions";
 
 async function updateParticipantShowSelf(room, identity, showSelf) {
   const info = await roomService.getParticipant(room, identity);

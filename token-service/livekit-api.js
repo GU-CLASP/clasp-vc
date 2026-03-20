@@ -1,4 +1,4 @@
-import { mustEnv, toHttpUrl } from "./utils.js";
+import { mustEnv, toHttpUrl, randomId } from "./utils.js";
 import { RoomServiceClient } from "livekit-server-sdk";
 
 export const LIVEKIT_URL = mustEnv("LIVEKIT_URL");

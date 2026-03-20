@@ -1,15 +1,19 @@
 import {
   AccessToken,
 } from "livekit-server-sdk";
-import { getExistingDelay } from "./delays";
+import { getExistingDelay, setParticipantDelay } from "./delays";
 import { app } from "./express";
+import { randomId, nowSec, requireAdmin, sha256, sanitizeIdentity, toWsUrl } from "./utils";
+import { identitySessions } from "./identity-sessions";
+import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL, DEFAULT_ROOM_NAME, PUBLIC_BASE_URL, roomService } from "./livekit-api";
+import { scheduleSync } from "./subscription-logic";
 
 const INVITE_TTL_SECONDS = Number(process.env.INVITE_TTL_SECONDS || 86400); // 24h
 const INVITE_MAX_USES = Number(process.env.INVITE_MAX_USES || 1);
 
 // In-memory invite store for a pilot.
 // For anything serious, swap to Redis/Postgres.
-const invites = new Map(); // inviteId -> { secretHash, room, role, exp, uses, maxUses }
+export const invites = new Map(); // inviteId -> { secretHash, room, role, exp, uses, maxUses }
 
 function cleanExpired() {
   const t = nowSec();
@@ -145,15 +149,12 @@ app.post("/api/connection-details", async (req, res) => {
 
     try {
       const existingDelay = getExistingDelay(inv.room, identity);
-      await effectsServiceRequest("/effects/delay", {
-        method: "POST",
-        body: JSON.stringify({
+      setParticipantDelay({
           room: inv.room,
           participant: identity,
           delayMs: existingDelay,
           keepAlive: true,
           participantName: displayName ?? session.name,
-        }),
       });
     } catch (err) {
       console.warn("delay keepAlive error:", err.message || err);

@@ -1,4 +1,9 @@
 import { app } from "./express";
+import { nowSec, sha256, log } from "./utils";
+import { roomService } from "./livekit-api";
+import { identitySessions } from "./identity-sessions";
+import { invites } from "./invites";
+import { removeDelay } from "./delays";
 
 process.on("unhandledRejection", (reason) => {
   console.error("unhandledRejection:", reason);
@@ -8,11 +13,7 @@ process.on("uncaughtException", (err) => {
   console.error("uncaughtException:", err);
 });
 
-const ADMIN_KEY = mustEnv("ADMIN_KEY");
 const PORT = Number(process.env.PORT || 9000);
-
-// Track participant identities issued per invite so we can clean up effect tracks on leave.
-const identitySessions = new Map(); // identity -> { inviteId, room, name, showSelf, admissionStatus }
 
 // Health check endpoint for container startup verification
 app.get("/api/healthz", (req, res) => {
@@ -53,10 +54,7 @@ app.post("/api/leave", async (req, res) => {
     }
 
     try {
-      await effectsServiceRequest("/effects/delay/remove", {
-        method: "POST",
-        body: JSON.stringify({ room: inv.room, participant: identity }),
-      });
+      await removeDelay(inv.room, identity);
     } catch (err) {
       console.warn("leave delay remove error:", err.message || err);
     }

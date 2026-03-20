@@ -1,5 +1,6 @@
 import { log } from "./utils";
 import { roomService } from "./livekit-api";
+import { identitySessions } from "./identity-sessions";
 
 export function isRecordableParticipant(identity) {
   if (!identity) return false;
@@ -17,7 +18,7 @@ function participantPermissionForSession(session) {
   };
 }
 
-async function applyParticipantSessionState(room, identity) {
+export async function applyParticipantSessionState(room, identity) {
   const session = identitySessions.get(identity);
   if (!session) return;
 
@@ -80,7 +81,7 @@ async function logAllTracks(room) {
   }
 }
 
-async function syncAdmittedSubscriptions(roomName) {
+export async function syncAdmittedSubscriptions(roomName) {
   const rooms = await roomService.listRooms([roomName]);
   const room = rooms[0];
   await logAllTracks(room);
@@ -114,7 +115,7 @@ async function syncAdmittedSubscriptions(roomName) {
   }
 }
 
-function scheduleSync(room, identity, session) {
+export function scheduleSync(room, identity, session) {
   const attempts = 10;
   const delayMs = 500;
 

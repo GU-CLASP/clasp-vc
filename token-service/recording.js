@@ -1,5 +1,6 @@
 import { app } from "./express.js";
 import {
+  EgressClient,
   EncodedFileOutput,
   EncodedFileType,
   EncodingOptionsPreset,
@@ -9,7 +10,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { PUBLIC_BASE_URL, LIVEKIT_HTTP_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET } from "./livekit-api.js";
 import { roomService } from "./livekit-api.js";
-import { requireAdmin, log } from "./utils.js";
+import { requireAdmin, log, randomId } from "./utils.js";
 import { isRecordableParticipant } from "./subscription-logic.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
