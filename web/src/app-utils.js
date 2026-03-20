@@ -5,6 +5,22 @@ import {
 const BASE_PATH = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 const IDENTITY_STORAGE_PREFIX = "clasp_vc_identity:";
 
+export function parseInviteFromUrl() {
+  const pathname = stripBasePath(window.location.pathname);
+  const m = pathname.match(/^\/join\/([^/]+)\/?$/);
+  const inviteId = m?.[1] || null;
+  const params = new URLSearchParams(window.location.search);
+  const key = params.get("k");
+  const adminKey = params.get("adminKey");
+
+  // Direct join parameters (admin-generated tokens)
+  const token = params.get("token");
+  const roomName = params.get("room");
+  const name = params.get("name");
+
+  return { inviteId, key, adminKey, token, roomName, name };
+}
+
 export function stripBasePath(pathname) {
   if (BASE_PATH && pathname.startsWith(BASE_PATH)) {
     const next = pathname.slice(BASE_PATH.length);
