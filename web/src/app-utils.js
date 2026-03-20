@@ -5,6 +5,19 @@ import {
 const BASE_PATH = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 const IDENTITY_STORAGE_PREFIX = "clasp_vc_identity:";
 
+export function clearRoom(room) {
+  try {
+    room.removeAllListeners();
+  } catch (e) {
+    console.log("Unable to remove room listeners", e);
+  }
+  try {
+    room.disconnect();
+  } catch (e) {
+    console.log("Unable to disconnect from room", e);
+  }
+}
+
 export function parseInviteFromUrl() {
   const pathname = stripBasePath(window.location.pathname);
   const m = pathname.match(/^\/join\/([^/]+)\/?$/);

@@ -17,6 +17,7 @@ import {
   clearStoredSession,
   saveStoredSession,
 } from "./app-utils.js";
+import { clearRoom } from "./src/app-utils.js";
 
 function buildParticipantList(room) {
   const local = room.localParticipant;
@@ -240,7 +241,9 @@ export default function ParticipantView() {
     setName("");
     try {
       room?.disconnect();
-    } catch {}
+    } catch (e) {
+      console.log("Unable to disconnect from room", e);
+    }
     clearLocalTracks();
     roomRef.current = null;
   }
@@ -379,7 +382,9 @@ export default function ParticipantView() {
         }
         try {
           await room.disconnect();
-        } catch {}
+        } catch (e) {
+          console.log("Unable to disconnect from room", e);
+        }
         return;
       }
 
@@ -408,12 +413,7 @@ export default function ParticipantView() {
 
     return () => {
       cancelled = true;
-      try {
-        room.removeAllListeners();
-      } catch {}
-      try {
-        room.disconnect();
-      } catch {}
+      clearRoom(room);
       clearLocalTracks();
       roomRef.current = null;
     };

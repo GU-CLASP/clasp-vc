@@ -14,6 +14,7 @@ import {
   getPreviewToken,
   getHealth,
 } from "./adminApi.js";
+import { clearRoom } from "./app-utils.js";
 
 export default function AdminPage() {
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -677,9 +678,7 @@ function buildPreviewParticipants(room, delayEffects) {
 }
 
 function attachTrack(el, track) {
-  try {
-    track.detach();
-  } catch {}
+  track.detach();
   const attachedEl = track.attach(el);
   return attachedEl;
 }
@@ -718,12 +717,7 @@ function CompositePreview({ conn, delayEffects, participantMetaByIdentity, onAdm
 
     return () => {
       cancelled = true;
-      try {
-        room.removeAllListeners();
-      } catch {}
-      try {
-        room.disconnect();
-      } catch {}
+      clearRoom(room);
       roomRef.current = null;
     };
   }, [conn?.url, conn?.token, onDisconnect]);
@@ -778,9 +772,7 @@ function PreviewTile({ participant, displayName, displayIdentity, meta, onAdmit 
       el.autoplay = true;
       el.playsInline = true;
     } else {
-      try {
-        el.srcObject = null;
-      } catch {}
+      el.srcObject = null;
     }
   }, [videoPub?.trackSid, videoPub?.track]);
 
@@ -792,9 +784,7 @@ function PreviewTile({ participant, displayName, displayIdentity, meta, onAdmit 
       el.autoplay = true;
       el.playsInline = true;
     } else {
-      try {
-        el.srcObject = null;
-      } catch {}
+      el.srcObject = null;
     }
   }, [audioPub?.trackSid, audioPub?.track]);
 

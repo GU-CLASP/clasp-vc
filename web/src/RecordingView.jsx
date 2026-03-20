@@ -4,7 +4,7 @@ import {
   RoomEvent,
 } from "livekit-client";
 import ParticipantCard from "./ParticipantCard";
-import { hasSubscribedVideo } from "./app-utils";
+import { clearRoom, hasSubscribedVideo } from "./app-utils";
 
 function parseRecordingParams() {
   const params = new URLSearchParams(window.location.search);
@@ -130,16 +130,7 @@ export default function RecordingView() {
 
     return () => {
       cancelled = true;
-      try {
-        room.removeAllListeners();
-      } catch (e) {
-        console.warn("Unable to remove listeners from room", e);
-      }
-      try {
-        room.disconnect();
-      } catch (e) {
-        console.warn("Unable to disconnect from room", e);
-      }
+      clearRoom(room);
       if (startedRef.current) {
         console.log("END_RECORDING");
         startedRef.current = false;
