@@ -4,6 +4,8 @@ import { roomService } from "./livekit-api.js";
 import { identitySessions } from "./identity-sessions.js";
 import { invites } from "./invites.js";
 import { removeDelay } from "./delays.js";
+import "./admin.js"; // Setup admin endpoints
+import "./recording.js"; // Setup recording endpoints
 
 process.on("unhandledRejection", (reason) => {
   console.error("unhandledRejection:", reason);

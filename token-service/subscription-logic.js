@@ -112,8 +112,8 @@ function shouldSubscribeTo(who, trackOwner) {
 
 export async function fixRoomSubscriptions(roomName) {
   const participantInfos = await roomService.listParticipants(roomName);
-  logAllTracks(roomName);
-  console.log(`fixRoomSubscriptions ${roomName}`);
+  await logAllTracks(roomName);
+  log(`fixRoomSubscriptions ${roomName}`);
   for (let who of participantInfos) {
     let subscribeTrackSids = [];
     let unsubscribeTrackSids = [];
@@ -125,7 +125,7 @@ export async function fixRoomSubscriptions(roomName) {
         unsubscribeTrackSids = unsubscribeTrackSids.concat(targetTracks);
       }
     }
-    console.log(`fixRoomSubscriptions: ${who.identity} should subscribe to ${subscribeTrackSids} but not to ${unsubscribeTrackSids}`);
+    log(`fixRoomSubscriptions: ${who.identity} should subscribe to ${subscribeTrackSids} but not to ${unsubscribeTrackSids}`);
     await roomService.updateSubscriptions(roomName, who.identity, subscribeTrackSids, true);
     await roomService.updateSubscriptions(roomName, who.identity, unsubscribeTrackSids, false);
   }
@@ -237,9 +237,9 @@ function shouldSubscribeToTracks(p) {
   return hasAdmittedProperty || isEffect
 }
 
-async function logAllTracks(room) {
+async function logAllTracks(roomName) {
   log("LOGALLTRACKS");
-  const participantInfos = await roomService.listParticipants(room.name);
+  const participantInfos = await roomService.listParticipants(roomName);
   for (let p of participantInfos) {
     log(`Participant ${p.identity} (${p.name}): ((${p.sid}))`);
     log(`- Attributes: ${JSON.stringify(p.attributes)}`);
@@ -255,7 +255,7 @@ export async function syncAdmittedSubscriptions(roomName) {
 
   const rooms = await roomService.listRooms([roomName]);
   const room = rooms[0];
-  await logAllTracks(room);
+  await logAllTracks(roomName);
   const participants = await roomService.listParticipants(roomName);
   const connected = participants.filter((p) => isRecordableParticipant(p.identity));
   const admitted = connected.filter((p) => shouldSubscribeToTracks(p));

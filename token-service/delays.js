@@ -293,7 +293,7 @@ class DelayEffectSession {
       })
       .on(RoomEvent.ParticipantDisconnected, (participant) => {
         if (!this.running) return;
-        log(`ParticipantDisconnected ${this.toString()} a`);
+        log(`ParticipantDisconnected ${this.toString()} a ${participant.identity}`);
         if (participant.identity !== this.participant) return;
         log(`ParticipantDisconnected ${this.toString()} b`);
         // Source participant left; keep effect tracks alive (black screen), reset state.
