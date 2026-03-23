@@ -40,7 +40,7 @@ function buildParticipantList(room) {
   }
 
   const list = [];
-  const localShowSelf = parseBooleanAttr(local?.attributes?.showSelf, true);
+  const localShowSelf = localAdmissionStatus == "pending" || parseBooleanAttr(local?.attributes?.showSelf, true);
   if (localShowSelf) {
     list.push({
       key: `local:${local.identity}`,
