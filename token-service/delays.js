@@ -18,6 +18,7 @@ import {
 import { log, requireAdmin } from "./utils";
 import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL_INTERNAL, roomService } from "./livekit-api";
 import { identitySessions } from "./identity-sessions";
+import { fixRoomSubscriptions, fixSubscriptionsFor } from "./subscription-logic";
 
 export function getExistingDelay(room, participant) {
   if (!room || !participant) return 0;
@@ -51,32 +52,6 @@ function myTimeout(func, delay) {
 
 function effectIdentityFor(participant) {
   return `fx_${participant}`;
-}
-
-function parseEgressMode(participantInfo) {
-  if (!participantInfo) return null;
-  const attrs = participantInfo.attributes || {};
-  if (attrs.egressMode) return String(attrs.egressMode);
-  const metadata = participantInfo.metadata;
-  if (typeof metadata === "string") {
-    const match = metadata.match(/(?:^|;)\s*egressMode=([a-z]+)/i);
-    if (match) return match[1].toLowerCase();
-  }
-  return null;
-}
-
-function isSubscriberParticipant(participantInfo, sourceIdentity) {
-  const identity = participantInfo?.identity || participantInfo;
-  if (!identity) return false;
-  if (identity === sourceIdentity) return false;
-  if (identity.startsWith("fx_")) return false;
-  if (identity.startsWith("EG_")) {
-    const mode = parseEgressMode(participantInfo);
-    if (mode === "individual") return false;
-    if (mode === "composite") return true;
-    return false;
-  }
-  return true;
 }
 
 function getEffectMap(room) {
@@ -334,6 +309,7 @@ class DelayEffectSession {
       })
       .on(RoomEvent.ParticipantConnected, async (participant) => {
         if (!this.running) return;
+        return;
         log(`ParticipantConnected ${this.toString()} a`);
         if (participant.identity === this.participant) return;
         log(`ParticipantConnected ${this.toString()} b`);
@@ -344,6 +320,7 @@ class DelayEffectSession {
         };
         if (!isSubscriberParticipant(info, this.participant)) return;
         if (this.trackSids.size === 0) return;
+        fixSubscriptionsFor(this.roomName, participant, this.trackSids);
         try {
           log(`Updating subscriptions for ${this.toString()} ${participant.name}: ${Array.from(this.trackSids)} --> false (ParticipantConnected)`);
           await this.roomService.updateSubscriptions(
@@ -358,6 +335,7 @@ class DelayEffectSession {
       })
       .on(RoomEvent.ParticipantAttributesChanged, async (_changed, participant) => {
         if (!this.running) return;
+        return;
         log(`ParticipantAttributesChanged ${this.toString()}: ${participant}`);
         if (participant.identity === this.participant) return;
         if (this.trackSids.size === 0) return;
@@ -367,6 +345,7 @@ class DelayEffectSession {
           metadata: participant.metadata,
         };
         const shouldUnsubscribe = isSubscriberParticipant(info, this.participant);
+        fixSubscriptionsFor(this.roomName, participant, this.trackSids);
         try {
           log(`Updating subscriptions for ${this.toString()} ${participant.name}: ${Array.from(this.trackSids)} --> ${!shouldUnsubscribe} (ParticipantAttributesChanged)`);
           await this.roomService.updateSubscriptions(
@@ -434,6 +413,8 @@ class DelayEffectSession {
   async _applyUnsubscribeToAll() {
     log(`${this.toString()}: _applyUnsubscribeToAll`);
     if (this.trackSids.size === 0) return;
+    fixRoomSubscriptions(this.roomName);
+    return;
     try {
       const participants = await this.roomService.listParticipants(this.roomName);
       const trackSids = Array.from(this.trackSids);
@@ -459,12 +440,15 @@ class DelayEffectSession {
 
   async _applyResubscribeToAll() {
     log(`${this.toString()}: _applyResubscribeToAll`);
+    fixRoomSubscriptions(this.roomName);
+    return;
     if (this.trackSids.size === 0) return;
     try {
       const participants = await this.roomService.listParticipants(this.roomName);
       const trackSids = Array.from(this.trackSids);
 
       for (const p of participants) {
+        fixSubscriptionsFor(this.roomName, p, this.trackSids);
         if (!isSubscriberParticipant(p, this.participant)) continue;
         try {
           log(`${this.toString()}: apply resubscribe - updateSubscriptions: ${p.name} ${p.identity} ${trackSids} true`);
