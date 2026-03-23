@@ -99,6 +99,7 @@ function buildParticipantList(room) {
 }
 
 function syncParticipantSubscriptions(room, role) {
+  return;
   console.log("syncParticipantSubscriptions", room, role);
   if (!room || role !== "participant") return;
 
