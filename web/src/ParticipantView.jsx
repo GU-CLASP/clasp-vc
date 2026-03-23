@@ -17,7 +17,7 @@ import {
   clearStoredSession,
   saveStoredSession,
 } from "./app-utils.js";
-import { clearRoom } from "./src/app-utils.js";
+import { clearRoom } from "./app-utils.js";
 
 function buildParticipantList(room) {
   const local = room.localParticipant;

@@ -2,7 +2,7 @@ import { useMemo } from "react";
 
 import AdminPage from "./AdminPage.jsx";
 import RecordingView from "./RecordingView.jsx";
-import ParticipantView from "../ParticipantView.jsx";
+import ParticipantView from "./ParticipantView.jsx";
 import {
   parseInviteFromUrl,
   isAdminPath,
