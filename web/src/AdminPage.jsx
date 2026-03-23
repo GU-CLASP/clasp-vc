@@ -720,7 +720,7 @@ function CompositePreview({ conn, delayEffects, participantMetaByIdentity, onAdm
       clearRoom(room);
       roomRef.current = null;
     };
-  }, [conn?.url, conn?.token, onDisconnect]);
+  }, [conn?.url, conn?.token]);
 
   const room = roomRef.current;
   const participants = room ? buildPreviewParticipants(room, delayEffects) : [];
