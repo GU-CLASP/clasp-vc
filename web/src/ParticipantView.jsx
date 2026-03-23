@@ -495,15 +495,6 @@ export default function ParticipantView() {
           Server appears to be offline or shutting down.
         </div>
       ) : null}
-      <div style={{ marginBottom: 10 }}>
-        <b>Status:</b> {status}{" "}
-        {room ? (
-          <>
-            | <b>room:</b> {conn.room} | <b>me:</b>{" "}
-            {room.localParticipant.identity}
-          </>
-        ) : null}
-      </div>
 
       {localAdmissionStatus !== "admitted" ? (
         <div style={{ marginBottom: 10, padding: 10, background: "#fff7df", color: "#6b4f00", borderRadius: 6 }}>

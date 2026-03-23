@@ -81,9 +81,6 @@ export default function ParticipantCard({
     >
       <div style={{ marginBottom: 8 }}>
         <b>{displayName || participant.name || participant.identity}</b>
-        <div style={{ opacity: 0.7, fontSize: 12 }}>
-          {displayIdentity || participant.identity}
-        </div>
       </div>
 
       {/* ✅ Video container with aspect ratio */}
@@ -109,11 +106,6 @@ export default function ParticipantCard({
 
       {/* Audio element is separate */}
       <audio ref={audioRef} />
-
-      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-        video: {overrideVideoTrack ? "local" : videoPub?.track ? "subscribed" : "none"} | audio:{" "}
-        {overrideAudioTrack ? "local" : audioPub?.track ? "subscribed" : "none"}
-      </div>
     </div>
   );
 }
