@@ -6,6 +6,7 @@ import { invites } from "./invites.js";
 import { removeDelay } from "./delays.js";
 import "./admin.js"; // Setup admin endpoints
 import "./recording.js"; // Setup recording endpoints
+import "./waiting-room.js"; // Setup waiting-room endpoints
 
 process.on("unhandledRejection", (reason) => {
   console.error("unhandledRejection:", reason);
