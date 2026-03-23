@@ -99,10 +99,10 @@ function buildParticipantList(room) {
 }
 
 function syncParticipantSubscriptions(room, role) {
-  return;
   console.log("syncParticipantSubscriptions", room, role);
   if (!room || role !== "participant") return;
 
+  const localIdentity = room.localParticipant?.identity || "(unknown)";
   const localAdmissionStatus = room.localParticipant?.attributes?.admissionStatus || "pending";
   const localCanReceive = localAdmissionStatus === "admitted";
   console.log(`syncParticipantSubscriptions: ${localAdmissionStatus} ${localCanReceive}`);
@@ -115,9 +115,10 @@ function syncParticipantSubscriptions(room, role) {
     const remoteAdmissionStatus = remoteParticipant.attributes?.admissionStatus || "pending";
     const shouldSubscribe =
       localCanReceive &&
-      !remoteParticipant.identity.startsWith("fx_") &&
-      remoteAdmissionStatus === "admitted";
-    console.log(`should I subscribe to ${remoteParticipant.identity} ? ${shouldSubscribe}`);
+      remoteParticipant.identity.startsWith("fx_") &&
+      remoteParticipant.identity != "fx_" + localIdentity;
+      //remoteAdmissionStatus === "admitted";
+    console.log(`should I - ${localIdentity} - subscribe to ${remoteParticipant.identity} ? ${shouldSubscribe}`);
 
     for (const publication of remoteParticipant.trackPublications.values()) {
       if (publication.isDesired !== shouldSubscribe) {
