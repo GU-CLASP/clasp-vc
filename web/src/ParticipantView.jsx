@@ -99,10 +99,12 @@ function buildParticipantList(room) {
 }
 
 function syncParticipantSubscriptions(room, role) {
+  console.log("syncParticipantSubscriptions", room, role);
   if (!room || role !== "participant") return;
 
   const localAdmissionStatus = room.localParticipant?.attributes?.admissionStatus || "pending";
   const localCanReceive = localAdmissionStatus === "admitted";
+  console.log(`syncParticipantSubscriptions: ${localAdmissionStatus} ${localCanReceive}`);
 
   for (const remoteParticipant of room.remoteParticipants.values()) {
     if (remoteParticipant.identity.startsWith("admin_") || remoteParticipant.identity.startsWith("EG_")) {
@@ -114,6 +116,7 @@ function syncParticipantSubscriptions(room, role) {
       localCanReceive &&
       !remoteParticipant.identity.startsWith("fx_") &&
       remoteAdmissionStatus === "admitted";
+    console.log(`should I subscribe to ${remoteParticipant.identity} ? ${shouldSubscribe}`);
 
     for (const publication of remoteParticipant.trackPublications.values()) {
       if (publication.isDesired !== shouldSubscribe) {

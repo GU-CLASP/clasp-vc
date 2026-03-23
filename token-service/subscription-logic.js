@@ -125,7 +125,8 @@ export async function fixRoomSubscriptions(roomName) {
         unsubscribeTrackSids = unsubscribeTrackSids.concat(targetTracks);
       }
     }
-    log(`fixRoomSubscriptions: ${who.identity} should subscribe to ${subscribeTrackSids} but not to ${unsubscribeTrackSids}`);
+    log(`fixRoomSubscriptions: ${who.identity} should subscribe to ${subscribeTrackSids}`);
+    log(`fixRoomSubscriptions: ${who.identity} should unsubscribe from ${unsubscribeTrackSids}`);
     await roomService.updateSubscriptions(roomName, who.identity, subscribeTrackSids, true);
     await roomService.updateSubscriptions(roomName, who.identity, unsubscribeTrackSids, false);
   }
@@ -241,7 +242,7 @@ async function logAllTracks(roomName) {
   log("LOGALLTRACKS");
   const participantInfos = await roomService.listParticipants(roomName);
   for (let p of participantInfos) {
-    log(`Participant ${p.identity} (${p.name}): ((${p.sid}))`);
+    log(`Participant ${p.identity} (${p.name}):`);
     log(`- Attributes: ${JSON.stringify(p.attributes)}`);
     log(`- Kind: ${p.kind}`);
     log(`- Track ids: ${p.tracks.map((tr) => `${tr.sid} ${tr.type} ${tr.name}`)}`);

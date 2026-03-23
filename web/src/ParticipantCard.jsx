@@ -4,6 +4,8 @@ import {
 } from "livekit-client";
 
 function attachTrack(el, track) {
+  console.log("attachTrack", el, track);
+
   // livekit-client track.attach() returns the element it attached to
   // but we want to attach to our existing element.
   // Easiest: detach anything currently on it, then attach fresh.
