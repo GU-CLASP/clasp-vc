@@ -1,4 +1,4 @@
-import { app } from "./express";
+import { app } from "./express.js";
 import { AccessToken } from "livekit-server-sdk";
 import {
   AudioFrame,
@@ -15,10 +15,10 @@ import {
   VideoSource,
   VideoStream,
 } from "@livekit/rtc-node";
-import { log, requireAdmin } from "./utils";
-import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL_INTERNAL, roomService } from "./livekit-api";
-import { identitySessions } from "./identity-sessions";
-import { fixRoomSubscriptions, fixSubscriptionsFor } from "./subscription-logic";
+import { log, requireAdmin } from "./utils.js";
+import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL_INTERNAL, roomService } from "./livekit-api.js";
+import { identitySessions } from "./identity-sessions.js";
+import { fixRoomSubscriptions, fixSubscriptionsFor } from "./subscription-logic.js";
 
 export function getExistingDelay(room, participant) {
   if (!room || !participant) return 0;

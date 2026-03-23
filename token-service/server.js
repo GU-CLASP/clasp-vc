@@ -1,9 +1,9 @@
-import { app } from "./express";
-import { nowSec, sha256, log } from "./utils";
-import { roomService } from "./livekit-api";
-import { identitySessions } from "./identity-sessions";
-import { invites } from "./invites";
-import { removeDelay } from "./delays";
+import { app } from "./express.js";
+import { nowSec, sha256, log } from "./utils.js";
+import { roomService } from "./livekit-api.js";
+import { identitySessions } from "./identity-sessions.js";
+import { invites } from "./invites.js";
+import { removeDelay } from "./delays.js";
 
 process.on("unhandledRejection", (reason) => {
   console.error("unhandledRejection:", reason);

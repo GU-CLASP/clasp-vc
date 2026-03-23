@@ -1,12 +1,12 @@
 import {
   AccessToken,
 } from "livekit-server-sdk";
-import { getExistingDelay, setParticipantDelay } from "./delays";
-import { app } from "./express";
-import { randomId, nowSec, requireAdmin, sha256, sanitizeIdentity, toWsUrl } from "./utils";
-import { identitySessions } from "./identity-sessions";
-import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL, DEFAULT_ROOM_NAME, PUBLIC_BASE_URL, roomService } from "./livekit-api";
-import { scheduleSync } from "./subscription-logic";
+import { getExistingDelay, setParticipantDelay } from "./delays.js";
+import { app } from "./express.js";
+import { randomId, nowSec, requireAdmin, sha256, sanitizeIdentity, toWsUrl } from "./utils.js";
+import { identitySessions } from "./identity-sessions.js";
+import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL, DEFAULT_ROOM_NAME, PUBLIC_BASE_URL, roomService } from "./livekit-api.js";
+import { scheduleSync } from "./subscription-logic.js";
 
 const INVITE_TTL_SECONDS = Number(process.env.INVITE_TTL_SECONDS || 86400); // 24h
 const INVITE_MAX_USES = Number(process.env.INVITE_MAX_USES || 1);

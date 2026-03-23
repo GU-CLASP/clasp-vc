@@ -1,6 +1,6 @@
-import { log } from "./utils";
-import { roomService } from "./livekit-api";
-import { identitySessions } from "./identity-sessions";
+import { log } from "./utils.js";
+import { roomService } from "./livekit-api.js";
+import { identitySessions } from "./identity-sessions.js";
 
 export function isRecordableParticipant(identity) {
   if (!identity) return false;

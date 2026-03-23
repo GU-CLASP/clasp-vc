@@ -1,7 +1,7 @@
-import { app } from "./express";
-import { requireAdmin, log } from "./utils";
-import { identitySessions } from "./identity-sessions";
-import { applyParticipantSessionState, syncAdmittedSubscriptions } from "./subscription-logic";
+import { app } from "./express.js";
+import { requireAdmin, log } from "./utils.js";
+import { identitySessions } from "./identity-sessions.js";
+import { applyParticipantSessionState, syncAdmittedSubscriptions } from "./subscription-logic.js";
 
 /**
  * ADMIN: Admit participant to the room
