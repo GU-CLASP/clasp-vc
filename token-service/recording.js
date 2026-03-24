@@ -282,6 +282,7 @@ app.post("/api/admin/recording/start", requireAdmin, async (req, res) => {
         );
         const egressId = await startParticipantEgress(room, recordingId, p.identity, p.name);
         if (egressId) {
+          log(`Recording: ${p.identity} (${p.name}) gets egress id ${egressId}`);
           egressIds.push(egressId);
           participantSet.add(p.identity);
           await tagNewEgressParticipants(room, "individual", egressBefore, 1);

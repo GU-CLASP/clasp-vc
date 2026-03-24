@@ -107,7 +107,8 @@ function shouldSubscribeTo(who, trackOwner) {
   if (isEgressParticipant(who)) {
     return isEffectParticipant(trackOwner);
   }
-  console.warn(`Unable to determine subscriptions for participant: ${who} ${who.identity} for trackOwner ${trackOwner} ${trackOwner.identity}`);
+  console.warn(`Unable to determine subscriptions for participant: ${who.identity} for trackOwner ${trackOwner.identity}`);
+  return false;
 }
 
 export async function fixRoomSubscriptions(roomName) {
@@ -125,8 +126,8 @@ export async function fixRoomSubscriptions(roomName) {
         unsubscribeTrackSids = unsubscribeTrackSids.concat(targetTracks);
       }
     }
-    log(`fixRoomSubscriptions: ${who.identity} should subscribe to ${subscribeTrackSids}`);
-    log(`fixRoomSubscriptions: ${who.identity} should unsubscribe from ${unsubscribeTrackSids}`);
+    log(`fixRoomSubscriptions: ${who.identity} (${who.name}) should subscribe to ${subscribeTrackSids}`);
+    log(`fixRoomSubscriptions: ${who.identity} (${who.name}) should unsubscribe from ${unsubscribeTrackSids}`);
     await roomService.updateSubscriptions(roomName, who.identity, subscribeTrackSids, true);
     await roomService.updateSubscriptions(roomName, who.identity, unsubscribeTrackSids, false);
   }
