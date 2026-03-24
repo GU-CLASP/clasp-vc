@@ -58,7 +58,8 @@ function isAdmittedParticipant(participant) {
  * @returns {boolean} True if participant is waiting to be admitted, false otherwise
  */
 function isWaitingRoomParticipant(participant) {
-  return participant.identity.startsWith("p_") && participant.attributes["admissionStatus"] == "pending";
+  // Sometimes your attribute might not have been set properly as 'pending', so default to waiting if you're not admitted.
+  return participant.identity.startsWith("p_") && !isAdmittedParticipant(participant);
 }
 
 /**
@@ -116,6 +117,10 @@ export async function fixRoomSubscriptions(roomName) {
   await logAllTracks(roomName);
   log(`fixRoomSubscriptions ${roomName}`);
   for (let who of participantInfos) {
+    if (isEgressParticipant(who)) {
+      log(`fixRoomSubscriptions: Skipping ${who.identity}`);
+      continue;
+    }
     let subscribeTrackSids = [];
     let unsubscribeTrackSids = [];
     for (let trackOwner of participantInfos) {
