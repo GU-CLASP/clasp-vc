@@ -18,7 +18,7 @@ import {
 import { log, requireAdmin } from "./utils.js";
 import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL_INTERNAL, roomService } from "./livekit-api.js";
 import { identitySessions } from "./identity-sessions.js";
-import { fixRoomSubscriptions, fixSubscriptionsFor } from "./subscription-logic.js";
+import { fixRoomSubscriptions } from "./subscription-logic.js";
 
 export function getExistingDelay(room, participant) {
   if (!room || !participant) return 0;
@@ -267,12 +267,10 @@ class DelayEffectSession {
       .on(RoomEvent.TrackSubscriptionFailed, (a, b, c) => {
         log("trackSubscriptionFailed", a, b.name, b.sid, c);
       })
-      .on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
-        log("trackSubscribed", track.sid, _pub.sid, participant.name, participant.sid);
+      .on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
+        log(`TrackSubscribed ${this}: ${participant.identity} (${participant.name}) subscribed to track ${track.sid} pub ${pub.sid}`);
         if (!this.running) return;
-        log(`TrackSubscribed ${this.toString()} a`);
         if (participant.identity !== this.participant) return;
-        log(`TrackSubscribed ${this.toString()} b`);
         this.sourceActive = true;
         this._stopEffectIdle();
         if (track.kind === TrackKind.KIND_AUDIO) {
@@ -281,11 +279,9 @@ class DelayEffectSession {
           this._startVideoEffect(track);
         }
       })
-      .on(RoomEvent.TrackUnsubscribed, (_track, _pub, participant) => {
-        log("trackUnsubscribed", _track.sid, _pub.sid, participant.name, participant.sid);
-        log(`TrackUnsubscribed ${this.toString()} a`);
+      .on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
+        log(`TrackUnsubscribed ${this}: ${participant.identity} (${participant.name}) unsubscribed from track ${track.sid} pub ${pub.sid}`);
         if (participant.identity !== this.participant) return;
-        log(`TrackUnsubscribed ${this.toString()} b`);
         // If the source track disappears, drop output until it returns.
         this.generation += 1;
         this.sourceActive = false;
@@ -309,54 +305,11 @@ class DelayEffectSession {
       })
       .on(RoomEvent.ParticipantConnected, async (participant) => {
         if (!this.running) return;
-        return;
-        log(`ParticipantConnected ${this.toString()} a`);
-        if (participant.identity === this.participant) return;
-        log(`ParticipantConnected ${this.toString()} b`);
-        const info = {
-          identity: participant.identity,
-          attributes: participant.attributes,
-          metadata: participant.metadata,
-        };
-        if (!isSubscriberParticipant(info, this.participant)) return;
-        if (this.trackSids.size === 0) return;
-        fixSubscriptionsFor(this.roomName, participant, this.trackSids);
-        try {
-          log(`Updating subscriptions for ${this.toString()} ${participant.name}: ${Array.from(this.trackSids)} --> false (ParticipantConnected)`);
-          await this.roomService.updateSubscriptions(
-            this.roomName,
-            participant.identity,
-            Array.from(this.trackSids),
-            false
-          );
-        } catch (err) {
-          console.warn("updateSubscriptions (join) failed:", err.message || err);
-        }
+        log(`ParticipantConnected: ${this} ${participant.identity} (${participant.name})`);
       })
       .on(RoomEvent.ParticipantAttributesChanged, async (_changed, participant) => {
         if (!this.running) return;
-        return;
-        log(`ParticipantAttributesChanged ${this.toString()}: ${participant}`);
-        if (participant.identity === this.participant) return;
-        if (this.trackSids.size === 0) return;
-        const info = {
-          identity: participant.identity,
-          attributes: participant.attributes,
-          metadata: participant.metadata,
-        };
-        const shouldUnsubscribe = isSubscriberParticipant(info, this.participant);
-        fixSubscriptionsFor(this.roomName, participant, this.trackSids);
-        try {
-          log(`Updating subscriptions for ${this.toString()} ${participant.name}: ${Array.from(this.trackSids)} --> ${!shouldUnsubscribe} (ParticipantAttributesChanged)`);
-          await this.roomService.updateSubscriptions(
-            this.roomName,
-            participant.identity,
-            Array.from(this.trackSids),
-            !shouldUnsubscribe
-          );
-        } catch (err) {
-          console.warn("updateSubscriptions (attrs) failed:", err.message || err);
-        }
+        log(`ParticipantAttributesChanged: ${this} ${participant.identity} (${participant.name})`);
       })
       .on(RoomEvent.TrackPublished, async (_pub, participant) => {
         if (participant.identity !== this.participant) return;
@@ -414,57 +367,11 @@ class DelayEffectSession {
     log(`${this.toString()}: _applyUnsubscribeToAll`);
     if (this.trackSids.size === 0) return;
     fixRoomSubscriptions(this.roomName);
-    return;
-    try {
-      const participants = await this.roomService.listParticipants(this.roomName);
-      const trackSids = Array.from(this.trackSids);
-
-      for (const p of participants) {
-        if (!isSubscriberParticipant(p, this.participant)) continue;
-        try {
-          log(`${this.toString()}: apply unsubscribe - updateSubscriptions: ${p.name} ${p.identity} ${trackSids} false`);
-          await this.roomService.updateSubscriptions(
-            this.roomName,
-            p.identity,
-            trackSids,
-            false
-          );
-        } catch (err) {
-          console.warn(`updateSubscriptions failed for ${p.identity}:`, err.message || err);
-        }
-      }
-    } catch (err) {
-      console.warn("applyUnsubscribe failed:", err.message || err);
-    }
   }
 
   async _applyResubscribeToAll() {
     log(`${this.toString()}: _applyResubscribeToAll`);
     fixRoomSubscriptions(this.roomName);
-    return;
-    if (this.trackSids.size === 0) return;
-    try {
-      const participants = await this.roomService.listParticipants(this.roomName);
-      const trackSids = Array.from(this.trackSids);
-
-      for (const p of participants) {
-        fixSubscriptionsFor(this.roomName, p, this.trackSids);
-        if (!isSubscriberParticipant(p, this.participant)) continue;
-        try {
-          log(`${this.toString()}: apply resubscribe - updateSubscriptions: ${p.name} ${p.identity} ${trackSids} true`);
-          await this.roomService.updateSubscriptions(
-            this.roomName,
-            p.identity,
-            trackSids,
-            true
-          );
-        } catch (err) {
-          console.warn(`resubscribe failed for ${p.identity}:`, err.message || err);
-        }
-      }
-    } catch (err) {
-      console.warn("applyResubscribe failed:", err.message || err);
-    }
   }
 
   async _applySubscriptionState() {

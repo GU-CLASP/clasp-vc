@@ -1,3 +1,26 @@
+/*
+This file centralizes the logic for which participant should subscribe to which tracks.
+
+  Subscriptions are updated on:
+  - participant joined --- this can maybe be removed? Assuming admin page will still work
+  - participant admitted
+  - retrieve connection details (invites.js)  --- this can maybe be removed?
+  - effect started, effect stopped
+
+  Expected subscriptions:
+  -----------------------
+  Participant         Tracks owned by         Should subscribe?
+  waiting room        *                       false
+  normal              effect (minus self)     true
+  normal              waiting room            false
+  egress-participant  specific participant    true
+  egress-composite    effect                  true
+  admin               waiting room            true
+  admin               normal                  eventually yes, but not needed right now
+  admin               effect                  true
+  effect              specific participant    true
+*/
+
 import { log } from "./utils.js";
 import { roomService } from "./livekit-api.js";
 import { identitySessions } from "./identity-sessions.js";
@@ -16,22 +39,6 @@ function participantPermissionForSession(session) {
     canPublishData: true,
     canSubscribe: true,// session?.admissionStatus === "admitted",
   };
-}
-
-export async function onParticipantAdmitted(roomName, participant) {
-
-}
-
-export async function onEffectStarted(roomName, participant) {
-
-}
-
-export async function onAdminConnected(roomName, participant) {
-
-}
-
-export async function fixImportedSubscriptionsFromParticipant(roomName, participant) {
-  // Check who should subscribe to this participant's tracks and fix that
 }
 
 /**
@@ -138,61 +145,6 @@ export async function fixRoomSubscriptions(roomName) {
   }
 }
 
-export async function fixSubscriptionsFor(roomName) {
-  await fixRoomSubscriptions(roomName);
-}
-
-
-// on participant admitted: give them subscriptions, take their effect subscriptions
-
-/*
-  Current updateSubscription calls:
-  - participant admitted
-  - retrieve connection details (invites.js)  --- can be removed?
-  - effect started, effect stopped
-
-
-
-  Expected subscriptions:
-  -----------------------
-  Participant         Tracks owned by         Should subscribe?
-  waiting room        *                       false
-  normal              effect (minus self)     true
-  normal              waiting room            false
-  egress-participant  specific participant    true
-  egress-composite    effect                  true
-  admin               waiting room            true
-  admin               normal                  eventually yes, but not needed right now
-  admin               effect                  true
-  effect              specific participant    true
-*/
-
-function isSubscriberParticipant(participantInfo, sourceIdentity) {
-  const identity = participantInfo?.identity || participantInfo;
-  if (!identity) return false;
-  if (identity === sourceIdentity) return false;
-  if (identity.startsWith("fx_")) return false;
-  if (identity.startsWith("EG_")) {
-    const mode = parseEgressMode(participantInfo);
-    if (mode === "individual") return false;
-    if (mode === "composite") return true;
-    return false;
-  }
-  return true;
-}
-
-function parseEgressMode(participantInfo) {
-  if (!participantInfo) return null;
-  const attrs = participantInfo.attributes || {};
-  if (attrs.egressMode) return String(attrs.egressMode);
-  const metadata = participantInfo.metadata;
-  if (typeof metadata === "string") {
-    const match = metadata.match(/(?:^|;)\s*egressMode=([a-z]+)/i);
-    if (match) return match[1].toLowerCase();
-  }
-  return null;
-}
-
 export async function applyParticipantSessionState(room, identity) {
   const session = identitySessions.get(identity);
   if (!session) return;
@@ -209,41 +161,6 @@ export async function applyParticipantSessionState(room, identity) {
   });
 }
 
-function scheduleApplyParticipantSessionState(room, identity, attempts = 20, delayMs = 500) {
-  const run = async (remaining) => {
-    const session = identitySessions.get(identity);
-    if (!session || session.room !== room) return;
-    try {
-      await applyParticipantSessionState(room, identity);
-    } catch (err) {
-      const message = String(err?.message || "");
-      const notFound = err?.code === 404 || /not found/i.test(message);
-      if (!notFound || remaining <= 1) {
-        if (!notFound) {
-          console.warn("applyParticipantSessionState error:", err?.message || err);
-        }
-        return;
-      }
-      const timeoutId = setTimeout(() => {
-        run(remaining - 1).catch((nextErr) => {
-          console.warn("applyParticipantSessionState retry error:", nextErr?.message || nextErr);
-        });
-      }, delayMs);
-      timeoutId.unref?.();
-    }
-  };
-
-  run(attempts).catch((err) => {
-    console.warn("scheduleApplyParticipantSessionState error:", err?.message || err);
-  });
-}
-
-function shouldSubscribeToTracks(p) {
-  const hasAdmittedProperty = identitySessions.get(p.identity)?.admissionStatus === "admitted";
-  const isEffect = p.identity.startsWith("fx_");
-  return hasAdmittedProperty || isEffect
-}
-
 async function logAllTracks(roomName) {
   log("LOGALLTRACKS");
   const participantInfos = await roomService.listParticipants(roomName);
@@ -258,39 +175,6 @@ async function logAllTracks(roomName) {
 
 export async function syncAdmittedSubscriptions(roomName) {
   fixRoomSubscriptions(roomName);
-  return;
-
-  const rooms = await roomService.listRooms([roomName]);
-  const room = rooms[0];
-  await logAllTracks(roomName);
-  const participants = await roomService.listParticipants(roomName);
-  const connected = participants.filter((p) => isRecordableParticipant(p.identity));
-  const admitted = connected.filter((p) => shouldSubscribeToTracks(p));
-  const pendingTrackSids = connected
-    .filter((p) => identitySessions.get(p.identity)?.admissionStatus !== "admitted")
-    .flatMap((p) => (p.tracks || []).map((t) => t.sid).filter(Boolean));
-
-  // Need to check if everyone is in room with the right status when this code runs...
-  log(`syncAdmittedSubscriptions, participants: ${participants.map(p => p.identity)}`);
-  log(`syncAdmittedSubscriptions, connected: ${connected.map(p => p.identity)}`);
-  log(`syncAdmittedSubscriptions, admitted: ${admitted.map(p => p.identity)}`);
-  log(`syncAdmittedSubscriptions, pendingTrackSids: ${pendingTrackSids}`);
-
-  for (const participant of admitted) {
-    const subscribeTrackSids = admitted
-      .filter((other) => other.identity !== participant.identity)
-      .flatMap((other) => (other.tracks || []).map((t) => t.sid).filter(Boolean));
-    log(`syncAdmittedSubscriptions, subscribeTrackSids for ${participant.identity}: ${subscribeTrackSids}`);
-
-    if (subscribeTrackSids.length > 0) {
-      log(`syncAdmittedSubscriptions. updateSubscriptions ${participant.name} ${participant.identity} ${subscribeTrackSids} true`);
-      await roomService.updateSubscriptions(roomName, participant.identity, subscribeTrackSids, true);
-    }
-    if (pendingTrackSids.length > 0) {
-      log(`syncAdmittedSubscriptions. updateSubscriptions ${participant.name} ${participant.identity} ${pendingTrackSids} false`);
-      await roomService.updateSubscriptions(roomName, participant.identity, pendingTrackSids, false);
-    }
-  }
 }
 
 export function scheduleSync(room, identity, session) {
@@ -318,26 +202,5 @@ export function scheduleSync(room, identity, session) {
 
   run(attempts).catch((err) => {
     console.warn("scheduleSync error:", err?.message || err);
-  });
-}
-
-function scheduleSyncAdmittedSubscriptions(room, attempts = 6, delayMs = 500) {
-  const run = async (remaining) => {
-    try {
-      await syncAdmittedSubscriptions(room);
-    } catch (err) {
-      console.warn("syncAdmittedSubscriptions error:", err?.message || err);
-    }
-    if (remaining <= 1) return;
-    const timeoutId = setTimeout(() => {
-      run(remaining - 1).catch((err) => {
-        console.warn("scheduleSyncAdmittedSubscriptions retry error:", err?.message || err);
-      });
-    }, delayMs);
-    timeoutId.unref?.();
-  };
-
-  run(attempts).catch((err) => {
-    console.warn("scheduleSyncAdmittedSubscriptions error:", err?.message || err);
   });
 }

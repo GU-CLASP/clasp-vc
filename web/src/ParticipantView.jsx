@@ -112,12 +112,10 @@ function syncParticipantSubscriptions(room, role) {
       continue;
     }
 
-    const remoteAdmissionStatus = remoteParticipant.attributes?.admissionStatus || "pending";
     const shouldSubscribe =
       localCanReceive &&
       remoteParticipant.identity.startsWith("fx_") &&
-      remoteParticipant.identity != "fx_" + localIdentity;
-      //remoteAdmissionStatus === "admitted";
+      remoteParticipant.identity != "fx_" + localIdentity; // Subscribe to all effects except your own
     console.log(`should I - ${localIdentity} - subscribe to ${remoteParticipant.identity} ? ${shouldSubscribe}`);
 
     for (const publication of remoteParticipant.trackPublications.values()) {
