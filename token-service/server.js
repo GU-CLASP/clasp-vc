@@ -19,6 +19,12 @@ process.on("uncaughtException", (err) => {
 
 const PORT = Number(process.env.PORT || 9000);
 
+// Remote logging to send log information from browser to server
+app.post("/api/log", (req, res) => {
+  log("Remote log: " + JSON.stringify(req.body));
+  res.status(204);
+});
+
 // Health check endpoint for container startup verification
 app.get("/api/healthz", (req, res) => {
   res.json({ status: "ok" });

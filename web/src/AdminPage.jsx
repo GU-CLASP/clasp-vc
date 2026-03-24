@@ -14,7 +14,7 @@ import {
   getPreviewToken,
   getHealth,
 } from "./adminApi.js";
-import { clearRoom } from "./app-utils.js";
+import { clearRoom, hasSubscribedVideo } from "./app-utils.js";
 
 export default function AdminPage() {
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -608,16 +608,6 @@ function isPreviewableIdentity(identity) {
   if (!identity) return false;
   if (identity.startsWith("fx_")) return true;
   if (identity.startsWith("p_")) return true;
-  return false;
-}
-
-function hasSubscribedVideo(participant) {
-  if (!participant) return false;
-  for (const pub of participant.trackPublications.values()) {
-    if (pub.kind === Track.Kind.Video && pub.track && pub.isSubscribed) {
-      return true;
-    }
-  }
   return false;
 }
 

@@ -116,3 +116,13 @@ export function hasSubscribedVideo(participant) {
   }
   return false;
 }
+
+export async function remoteLog(message) {
+  await fetch("/api/log", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ message }),
+  }).catch((err) => {
+    console.log("Debug failed: " + err);
+  });
+}

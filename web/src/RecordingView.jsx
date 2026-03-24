@@ -4,7 +4,7 @@ import {
   RoomEvent,
 } from "livekit-client";
 import ParticipantCard from "./ParticipantCard";
-import { clearRoom, hasSubscribedVideo } from "./app-utils";
+import { clearRoom, hasSubscribedVideo, remoteLog } from "./app-utils";
 
 function parseRecordingParams() {
   const params = new URLSearchParams(window.location.search);
@@ -68,6 +68,7 @@ function buildRecordingParticipantList(room) {
       displayIdentity: id,
     });
   }
+  remoteLog({ recordingParticipants: list });
 
   return list;
 }
@@ -103,6 +104,7 @@ export default function RecordingView() {
 
     room.on(RoomEvent.Disconnected, () => {
       if (!cancelled) setStatus("idle");
+      remoteLog("End recording");
       if (startedRef.current) {
         console.log("END_RECORDING");
         startedRef.current = false;
@@ -111,15 +113,19 @@ export default function RecordingView() {
 
     (async () => {
       try {
+        remoteLog("Await connect");
         await room.connect(url, token, { autoSubscribe: true });
         if (cancelled) return;
+        remoteLog("Connected");
         setStatus("connected");
         if (!startedRef.current) {
+          remoteLog("Start recording");
           console.log("START_RECORDING");
           startedRef.current = true;
         }
         forceRender();
       } catch (e) {
+        remoteLog(`Recording connect error: ${e}`);
         console.error("recording connect error:", e);
         if (!cancelled) {
           setStatus("error");
