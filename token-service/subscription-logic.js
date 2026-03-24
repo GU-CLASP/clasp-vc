@@ -24,6 +24,7 @@ This file centralizes the logic for which participant should subscribe to which 
 import { log } from "./utils.js";
 import { roomService } from "./livekit-api.js";
 import { identitySessions } from "./identity-sessions.js";
+import { testShared } from "../shared/shared.js";
 
 export function isRecordableParticipant(identity) {
   if (!identity) return false;
@@ -121,6 +122,7 @@ function shouldSubscribeTo(who, trackOwner) {
 
 export async function fixRoomSubscriptions(roomName) {
   const participantInfos = await roomService.listParticipants(roomName);
+  testShared();
   await logAllTracks(roomName);
   log(`fixRoomSubscriptions ${roomName}`);
   for (let who of participantInfos) {

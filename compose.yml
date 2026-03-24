@@ -39,11 +39,12 @@ services:
   token-service:
     image: docker.io/node:20-bullseye
     network_mode: "host"
-    working_dir: /app
+    working_dir: /app/backend
     volumes:
-      - ./token-service:/app:Z
-      - ./data/recordings:/app/recordings:z
+      - ./token-service:/app/backend:Z
+      - ./data/recordings:/app/backend/recordings:z
       - ./data/logs/token-service:/var/log/token-service:z
+      - ./shared:/app/shared:z
     command: >
       sh -lc "mkdir -p /var/log/token-service &&
       logfile=/var/log/token-service/token-service-$$(date +%Y%m%d-%H%M%S).log &&
@@ -59,7 +60,7 @@ services:
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - INVITE_TTL_SECONDS=86400
       - INVITE_MAX_USES=${INVITE_MAX_USES:-0}
-      - RECORDINGS_DIR=/app/recordings
+      - RECORDINGS_DIR=/app/backend/recordings
       - EGRESS_FILE_BASE=/out/recordings
     logging:
       driver: k8s-file
@@ -69,9 +70,10 @@ services:
       - token-service
     image: docker.io/node:20-alpine
     network_mode: "host"
-    working_dir: /app
+    working_dir: /app/frontend
     volumes:
-      - ./web:/app:Z
+      - ./web:/app/frontend:Z
+      - ./shared:/app/shared:z
     command: >
       sh -lc "node -v && npm -v && npm install &&
       until wget -T 2 -qO- http://127.0.0.1:9000/api/healthz >/dev/null; do

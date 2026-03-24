@@ -14,6 +14,7 @@ import {
   getPreviewToken,
   getHealth,
 } from "./adminApi.js";
+import { testShared } from "../../shared/shared.js";
 import { clearRoom, hasSubscribedVideo } from "./app-utils.js";
 
 export default function AdminPage() {
@@ -240,6 +241,7 @@ export default function AdminPage() {
   }
 
   async function handleAdmitParticipant(identity) {
+    testShared();
     if (!selectedRoom) return;
     if (serverOffline) {
       appendError("admit participant failed: server appears offline");
