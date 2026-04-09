@@ -81,6 +81,8 @@ export default function ParticipantCard({
     >
       <div style={{ marginBottom: 8 }}>
         <b>{displayName || participant.name || participant.identity}</b>
+        {overrideVideoTrack != null ? "override" : JSON.stringify(videoPub?.trackSid)}
+        {overrideAudioTrack != null ? "override" : JSON.stringify(audioPub?.trackSid)}
       </div>
 
       {/* ✅ Video container with aspect ratio */}

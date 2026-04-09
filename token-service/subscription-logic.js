@@ -169,14 +169,13 @@ async function logAllTracks(roomName) {
   for (let p of participantInfos) {
     log(`Participant ${p.identity} (${p.name}):`);
     log(`- Attributes: ${JSON.stringify(p.attributes)}`);
-    log(`- Kind: ${p.kind}`);
     log(`- Track ids: ${p.tracks.map((tr) => `${tr.sid} ${tr.type} ${tr.name}`)}`);
     log(`- Permissions: ${JSON.stringify(p.permission)}`);
   }
 }
 
 export async function syncAdmittedSubscriptions(roomName) {
-  fixRoomSubscriptions(roomName);
+  await fixRoomSubscriptions(roomName);
 }
 
 export function scheduleSync(room, identity, session) {

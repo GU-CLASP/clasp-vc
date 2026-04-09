@@ -794,6 +794,8 @@ function PreviewTile({ participant, displayName, displayIdentity, meta, onAdmit 
         <div style={{ opacity: 0.6, fontSize: 12 }}>
           {displayIdentity || participant.identity}
         </div>
+        {JSON.stringify(videoPub?.trackSid)}
+        {JSON.stringify(audioPub?.trackSid)}
       </div>
       <div
         style={{
