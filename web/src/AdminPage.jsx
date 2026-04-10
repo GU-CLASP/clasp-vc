@@ -44,6 +44,7 @@ export default function AdminPage() {
   );
 
   useEffect(() => {
+    document.title = "Videochat Admin";
     let cancelled = false;
     (async () => {
       try {
