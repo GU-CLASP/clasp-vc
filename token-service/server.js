@@ -8,6 +8,7 @@ import "./admin.js"; // Setup admin endpoints
 import "./recording.js"; // Setup recording endpoints
 import "./waiting-room.js"; // Setup waiting-room endpoints
 import "./showself.js"; // Setup show-self endpoints
+import "./text-broadcast.js"; // Setup text-broadcast endpoint
 
 process.on("unhandledRejection", (reason) => {
   console.error("unhandledRejection:", reason);

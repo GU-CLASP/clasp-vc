@@ -137,3 +137,11 @@ export async function getHealth() {
   const r = await makeAdminRequest("/api/admin/health");
   return parseResponse(r, "getHealth");
 }
+
+export async function sendTextBroadcast(room, text) {
+  const r = await makeAdminRequest("/api/admin/textBroadcast", {
+    method: "POST",
+    body: JSON.stringify({ room, text })
+  });
+  return parseResponse(r, "sendTextBroadcast");
+}

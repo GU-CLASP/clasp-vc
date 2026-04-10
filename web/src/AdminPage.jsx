@@ -9,6 +9,7 @@ import {
   startRecording,
   stopRecording,
   getRecordingStatus,
+  sendTextBroadcast,
   setDelayEffect,
   getDelayEffectStatus,
   getPreviewToken,
@@ -23,6 +24,7 @@ export default function AdminPage() {
   const [delayEffects, setDelayEffects] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [textToSend, setTextToSend] = useState("");
   const [errorLog, setErrorLog] = useState([]);
   const [success, setSuccess] = useState("");
   const [previewConn, setPreviewConn] = useState(null);
@@ -219,6 +221,16 @@ export default function AdminPage() {
     }
   }
 
+  async function handleSendTextBroadcast(text) {
+    try {
+      await sendTextBroadcast(selectedRoom, text);
+      setSuccess(`Sent text`);
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (e) {
+      appendError(`send text broadcast failed: ${e?.message || e}`);
+    }
+  }
+
   async function handleRemoveParticipant(identity) {
     if (!selectedRoom) return;
     if (serverOffline) {
@@ -315,6 +327,35 @@ export default function AdminPage() {
   return (
     <div style={{ fontFamily: "system-ui", padding: 24, maxWidth: 1200, margin: "0 auto" }}>
       <h1>Video Conference Admin Panel</h1>
+
+      <div>
+        <input
+          type="text"
+          value={textToSend}
+          onChange={(e) => setTextToSend(e.target.value)}
+          placeholder="Text to send to participants"
+          style={{
+            width: "100%",
+            padding: "4px 6px",
+            border: "1px solid #ccc",
+            borderRadius: 3,
+          }}
+        />
+        <button
+          onClick={() => handleSendTextBroadcast(textToSend)}
+          style={{
+            padding: "4px 8px",
+            backgroundColor: "#2196F3",
+            color: "white",
+            border: "none",
+            borderRadius: 3,
+            fontSize: 12,
+          }}
+        >
+          Send Text to all participants
+        </button>
+      </div>
+
 
       <div style={{ marginBottom: 16 }}>
         <strong>Room:</strong>{" "}

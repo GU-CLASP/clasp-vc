@@ -510,6 +510,9 @@ export default function ParticipantView() {
       ) : null}
 
       {err ? <div style={{ color: "crimson", marginBottom: 10 }}>{err}</div> : null}
+      <div>
+        {room?.localParticipant?.attributes?.message || ""}
+      </div>
 
       <div
         style={{
