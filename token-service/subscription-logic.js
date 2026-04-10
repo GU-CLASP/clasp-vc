@@ -121,7 +121,7 @@ function shouldSubscribeTo(who, trackOwner) {
     } else if (useDelays) {
       return false;
     } else {
-      return isAdmittedParticipant(trackOwner);
+      return isAdmittedParticipant(trackOwner) && trackOwner.identity != who.identity;
     }
   }
   if (isEgressParticipant(who)) {
