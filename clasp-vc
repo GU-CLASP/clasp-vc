@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import datetime
 import json
 import os
 import subprocess
@@ -230,6 +231,11 @@ def do_up():
 
     write_invite_link(invite_url)
     print(f"Invite link: {invite_url}")
+
+    now = datetime.datetime.now()
+    time = str(now)
+    with open("link.html", "w", encoding="utf-8") as handle:
+        handle.write(f"Invite link: <a href=\"{invite_url}\">Invite link as of {time}</a>")
     return 0
 
 
