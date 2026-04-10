@@ -59,7 +59,7 @@ export default function ParticipantCard({
     if (!el) return;
 
     const track = overrideAudioTrack || audioPub?.track;
-    if (track) {
+    if (track && !muteAudioPlayback) {
       console.log(`Adding audio track for ${displayName}:`, audioRef);
       attachTrack(el, track);
       el.autoplay = true;
@@ -107,7 +107,7 @@ export default function ParticipantCard({
       </div>
 
       {/* Audio element is separate */}
-      <audio ref={audioRef} />
+      {muteAudioPlayback ? <span /> : <audio ref={audioRef} />}
     </div>
   );
 }
