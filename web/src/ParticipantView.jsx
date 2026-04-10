@@ -18,6 +18,7 @@ import {
   saveStoredSession,
 } from "./app-utils.js";
 import { clearRoom } from "./app-utils.js";
+import { useDelays } from "../../shared/shared.js";
 
 function buildParticipantList(room) {
   const local = room.localParticipant;
@@ -112,10 +113,16 @@ function syncParticipantSubscriptions(room, role) {
       continue;
     }
 
-    const shouldSubscribe =
-      localCanReceive &&
+    const shouldSubscribeWithDelays = localCanReceive &&
       remoteParticipant.identity.startsWith("fx_") &&
       remoteParticipant.identity != "fx_" + localIdentity; // Subscribe to all effects except your own
+
+    const shouldSubscribeNoDelays = localCanReceive &&
+      remoteParticipant.identity.startsWith("p_") &&
+      remoteParticipant.identity != "p_" + localIdentity; // Subscribe to all participants except your own
+
+    const shouldSubscribe = useDelays ? shouldSubscribeWithDelays : shouldSubscribeNoDelays;
+
     console.log(`should I - ${localIdentity} - subscribe to ${remoteParticipant.identity} ? ${shouldSubscribe}`);
 
     for (const publication of remoteParticipant.trackPublications.values()) {
@@ -371,7 +378,9 @@ export default function ParticipantView() {
 
     (async () => {
       try {
-        const shouldAutoSubscribe = conn?.role !== "participant";
+        const shouldAutoSubscribe = false;// conn?.role !== "participant";
+//        const shouldAutoSubscribe = true;
+        console.log("shouldAutoSubscribe", shouldAutoSubscribe);
         await room.connect(conn.url, conn.token, { autoSubscribe: shouldAutoSubscribe });
         if (cancelled) return;
         syncParticipantSubscriptions(room, conn?.role);

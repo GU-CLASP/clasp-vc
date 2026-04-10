@@ -16,11 +16,13 @@ import {
   VideoStream,
 } from "@livekit/rtc-node";
 import { log, requireAdmin } from "./utils.js";
+import { useDelays } from "../shared/shared.js";
 import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL_INTERNAL, roomService } from "./livekit-api.js";
 import { identitySessions } from "./identity-sessions.js";
 import { fixRoomSubscriptions } from "./subscription-logic.js";
 
 export function getExistingDelay(room, participant) {
+  if (!useDelays) return 0;
   if (!room || !participant) return 0;
   try {
     const payload = getCurrentDelays(room);
@@ -62,6 +64,7 @@ function getEffectMap(room) {
 }
 
 export async function setParticipantDelay(request) {
+  if (!useDelays) return { success: true };
   try {
     const { room, participant, delayMs, keepAlive, participantName } = request || {};
     if (!room || !participant) {
@@ -134,6 +137,7 @@ export async function setParticipantDelay(request) {
 }
 
 export async function removeDelay(roomName, participantIdentity) {
+  if (!useDelays) return true;
   try {
     const effectSessions = roomEffects.get(roomName);
     const existing = effectSessions?.get(participantIdentity);
@@ -198,6 +202,7 @@ class DelayEffectSession {
   }
 
   async start() {
+    if (!useDelays) return;
     this.running = true;
     log(`Starting ${this.toString()}`);
     await this._connect();
@@ -211,6 +216,7 @@ class DelayEffectSession {
   }
 
   async stop() {
+    if (!useDelays) return;
     this.running = false;
     log(`Stopping ${this.toString()}`);
     this.generation += 1;
@@ -237,6 +243,7 @@ class DelayEffectSession {
   }
 
   async setDelay(delayMs) {
+    if (!useDelays) return;
     log(`Change delay of ${this.toString()} to ${delayMs}`);
     const prev = this.delayMs;
     this.delayMs = delayMs;
@@ -258,6 +265,7 @@ class DelayEffectSession {
   }
 
   async _connect() {
+    if (!useDelays) return;
     log(`Connecting ${this.toString()}`);
     const token = await this._effectToken();
     const room = new Room({ adaptiveStream: true, dynacast: true });
@@ -346,6 +354,7 @@ class DelayEffectSession {
   }
 
   async _syncTrackSids() {
+    if (!useDelays) return;
     try {
       const participants = await this.roomService.listParticipants(this.roomName);
       const target = participants.find((p) => p.identity === this.participant);
@@ -364,17 +373,20 @@ class DelayEffectSession {
   }
 
   async _applyUnsubscribeToAll() {
+    if (!useDelays) return;
     log(`${this.toString()}: _applyUnsubscribeToAll`);
     if (this.trackSids.size === 0) return;
     fixRoomSubscriptions(this.roomName);
   }
 
   async _applyResubscribeToAll() {
+    if (!useDelays) return;
     log(`${this.toString()}: _applyResubscribeToAll`);
     fixRoomSubscriptions(this.roomName);
   }
 
   async _applySubscriptionState() {
+    if (!useDelays) return;
     // Always use fx_* tracks to avoid flickering when switching delay on and off
     await this._applyUnsubscribeToAll();
   }
@@ -398,6 +410,7 @@ class DelayEffectSession {
   }
 
   _safeCaptureAudio(frame) {
+    if (!useDelays) return;
     if (this.audioCaptureFailed) return;
     const source = this.audioSource;
     if (!source) return;
@@ -405,6 +418,7 @@ class DelayEffectSession {
   }
 
   _safeCaptureVideo(frame) {
+    if (!useDelays) return;
     if (this.videoCaptureFailed) return;
     const source = this.videoSource;
     if (!source) return;
@@ -413,6 +427,7 @@ class DelayEffectSession {
   }
 
   async _startAudioEffect(track) {
+    if (!useDelays) return;
     if (!this.running) return;
     this.audioCaptureFailed = false;
     const audioStream = new AudioStream(track);
@@ -451,6 +466,7 @@ class DelayEffectSession {
   }
 
   async _startVideoEffect(track) {
+    if (!useDelays) return;
     if (!this.running) return;
     this.videoCaptureFailed = false;
     const videoStream = new VideoStream(track);
@@ -491,6 +507,7 @@ class DelayEffectSession {
   }
 
   async _ensureEffectTracks() {
+    if (!useDelays) return;
     if (!this.room) return;
     const local = this.room.localParticipant;
     log(`${this.toString()}: _ensureEffectTracks`);
@@ -519,6 +536,7 @@ class DelayEffectSession {
   }
 
   async _startEffectIdle() {
+    if (!useDelays) return;
     if (!this.running) return;
     if (this.effectIdleAudioTimer || this.effectIdleVideoTimer) return;
     if (this.effectIdleStarting) return;
@@ -565,6 +583,7 @@ class DelayEffectSession {
   }
 
   _stopEffectIdle() {
+    if (!useDelays) return;
     if (this.effectIdleAudioTimer) {
       clearInterval(this.effectIdleAudioTimer);
       this.effectIdleAudioTimer = null;

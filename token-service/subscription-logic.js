@@ -24,7 +24,7 @@ This file centralizes the logic for which participant should subscribe to which 
 import { log } from "./utils.js";
 import { roomService } from "./livekit-api.js";
 import { identitySessions } from "./identity-sessions.js";
-import { testShared } from "../shared/shared.js";
+import { useDelays } from "../shared/shared.js";
 
 export function isRecordableParticipant(identity) {
   if (!identity) return false;
@@ -89,6 +89,15 @@ function isEffectParticipant(participant) {
 }
 
 /**
+ * Check if participant is someone that other participants should subscribe to
+ * @param {ParticipantInfo} participant Participant to check
+ * @returns {boolean} True if participant should be subscribed to, false otherwise
+ */
+function isSharedParticipant(participant) {
+  return useDelays ? isEffectParticipant(participant) : isAdmittedParticipant(participant);
+}
+
+/**
  * Single source of truth about who should subscribe to what
  * 
  * @param {ParticipantInfo} who The subject, who should do the (un)subscribing
@@ -96,7 +105,7 @@ function isEffectParticipant(participant) {
  */
 function shouldSubscribeTo(who, trackOwner) {
   if (isAdminParticipant(who)) {
-    return !isAdmittedParticipant(trackOwner);
+    return isWaitingRoomParticipant(trackOwner) || isSharedParticipant(trackOwner);
   }
   if (isWaitingRoomParticipant(who)) {
     return false;
@@ -106,15 +115,17 @@ function shouldSubscribeTo(who, trackOwner) {
     return trackOwner.identity == effectSource;
   }
   if (isAdmittedParticipant(who)) {
-    if (isEffectParticipant(trackOwner)) {
+    if (useDelays && isEffectParticipant(trackOwner)) {
       const effectSource = trackOwner.identity.substring("fx_".length);
       return effectSource != who.identity;
-    } else {
+    } else if (useDelays) {
       return false;
+    } else {
+      return isAdmittedParticipant(trackOwner);
     }
   }
   if (isEgressParticipant(who)) {
-    return isEffectParticipant(trackOwner);
+    return isSharedParticipant(trackOwner);
   }
   console.warn(`Unable to determine subscriptions for participant: ${who.identity} for trackOwner ${trackOwner.identity}`);
   return false;
@@ -122,7 +133,6 @@ function shouldSubscribeTo(who, trackOwner) {
 
 export async function fixRoomSubscriptions(roomName) {
   const participantInfos = await roomService.listParticipants(roomName);
-  testShared();
   await logAllTracks(roomName);
   log(`fixRoomSubscriptions ${roomName}`);
   for (let who of participantInfos) {
