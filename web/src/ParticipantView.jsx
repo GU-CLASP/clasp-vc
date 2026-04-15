@@ -136,10 +136,30 @@ function syncParticipantSubscriptions(room, role) {
   }
 }
 
-async function avatarInit() {
-  const video = document.getElementById('video');
+async function waitForVideoFrame(video) {
+  if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    return;
+  }
+
+  await new Promise((resolve) => {
+    const onReady = () => {
+      video.removeEventListener("loadeddata", onReady);
+      video.removeEventListener("canplay", onReady);
+      resolve();
+    };
+
+    video.addEventListener("loadeddata", onReady, { once: true });
+    video.addEventListener("canplay", onReady, { once: true });
+  });
+}
+
+async function avatarInit(video, canvas) {
+  if (!(video instanceof HTMLVideoElement) || !(canvas instanceof HTMLCanvasElement)) {
+    return () => {};
+  }
+
   const avatar = new Aniface({
-    canvasElement: document.getElementById('avatar'),
+    canvasElement: canvas,
     modelPath: raccoonHeadModel
     // No videoElement needed when using custom MediaPipe
   });
@@ -164,8 +184,21 @@ async function avatarInit() {
     // ... other custom options
   });
 
+  let cancelled = false;
+
+  await waitForVideoFrame(video);
+
   // Manual animation loop with custom MediaPipe
   function animate() {
+    if (cancelled) {
+      return;
+    }
+
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) {
+      requestAnimationFrame(animate);
+      return;
+    }
+
     const results = myLandmarker.detectForVideo(video, performance.now());
     if (timeIndex++ % 1000 == 20) {
       console.log(results);
@@ -174,6 +207,11 @@ async function avatarInit() {
     requestAnimationFrame(animate);
   }
   animate();
+
+  return () => {
+    cancelled = true;
+    myLandmarker.close();
+  };
 }
 var timeIndex = 0;
 
@@ -191,8 +229,25 @@ export default function ParticipantView() {
   const [serverOffline, setServerOffline] = useState(false);
 
   useEffect(() => {
-    avatarInit();
-  }, [token, roomName, conn]);
+    if (!conn) return undefined;
+
+    const video = document.getElementById("localVideo");
+    const canvas = document.getElementById("avatar");
+    let dispose = null;
+    let cancelled = false;
+
+    (async () => {
+      dispose = await avatarInit(video, canvas);
+      if (cancelled && dispose) {
+        dispose();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      dispose?.();
+    };
+  }, [conn]);
 
   // Keep a single Room instance per "session"
   const roomRef = useRef(null);
@@ -608,7 +663,7 @@ export default function ParticipantView() {
       </div>
 
       <h3>Avatar</h3>
-      <video id="localVideo" />
+      <video id="localVideo" autoPlay muted playsInline />
       <canvas id="avatar" />
 
       <div style={{ marginTop: 12 }}>
