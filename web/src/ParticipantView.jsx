@@ -1,4 +1,4 @@
-import { FaceLandmarker } from '@mediapipe/tasks-vision';
+import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Room,
@@ -11,6 +11,7 @@ import { Aniface } from "aniface";
 
 import { getConnectionDetails, leaveSession } from "./api.js";
 import ParticipantCard from "./ParticipantCard.jsx";
+import raccoonHeadModel from "./raccoon_head_small.glb?url";
 import {
   parseInviteFromUrl,
   parseBooleanAttr,
@@ -136,9 +137,10 @@ function syncParticipantSubscriptions(room, role) {
 }
 
 async function avatarInit() {
+  const video = document.getElementById('video');
   const avatar = new Aniface({
     canvasElement: document.getElementById('avatar'),
-    modelPath: 'raccoon_head_small.glb'
+    modelPath: raccoonHeadModel
     // No videoElement needed when using custom MediaPipe
   });
   await avatar.initialize();
@@ -148,22 +150,32 @@ async function avatarInit() {
   );
   // Create MediaPipe instance with custom configuration
   const myLandmarker = await FaceLandmarker.createFromOptions(vision, {
-    runningMode: 'VIDEO',
+    baseOptions: {
+      modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+      delegate: 'GPU',
+    },
     minFaceDetectionConfidence: 0.7,
     minFacePresenceConfidence: 0.7,
-    minTrackingConfidence: 0.7
+    minTrackingConfidence: 0.7,
+    outputFaceBlendshapes: true,
+    outputFacialTransformationMatrixes: true,
+    runningMode: 'VIDEO',
+    numFaces: 1,
     // ... other custom options
   });
 
   // Manual animation loop with custom MediaPipe
   function animate() {
-    requestAnimationFrame(animate);
     const results = myLandmarker.detectForVideo(video, performance.now());
-    console.log(results);
+    if (timeIndex++ % 1000 == 20) {
+      console.log(results);
+    }
     avatar.processLandmarkData(results);
+    requestAnimationFrame(animate);
   }
   animate();
 }
+var timeIndex = 0;
 
 export default function ParticipantView() {
   const { inviteId, key, token, roomName, name: urlName } = useMemo(parseInviteFromUrl, []);
@@ -438,17 +450,29 @@ export default function ParticipantView() {
 
       try {
         // Publish local tracks (cam + mic). If permissions fail, stay connected.
-        const tracks = await createLocalTracks({
+
+        /*const tracks = await createLocalTracks({
+          audio: true,
+          video: true,
+        });*/
+
+        const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
           video: true,
         });
+        const tracks = stream.getTracks();
+
+        const videoStream = new MediaStream(stream.getVideoTracks());
+        const audioStream = new MediaStream(stream.getAudioTracks());
 
         const localVideo = tracks.find((t) => t.kind === Track.Kind.Video) || null;
         const localAudio = tracks.find((t) => t.kind === Track.Kind.Audio) || null;
-        localTracksRef.current = { video: localVideo, audio: localAudio };
+        document.getElementById('localVideo').srcObject = videoStream;
+
+        // localTracksRef.current = { video: localVideo, audio: localAudio };
 
         for (const t of tracks) {
-          await room.localParticipant.publishTrack(t);
+          // await room.localParticipant.publishTrack(t);
         }
         forceRender();
       } catch (e) {
@@ -583,6 +607,8 @@ export default function ParticipantView() {
         ))}
       </div>
 
+      <h3>Avatar</h3>
+      <video id="localVideo" />
       <canvas id="avatar" />
 
       <div style={{ marginTop: 12 }}>
