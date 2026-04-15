@@ -1,3 +1,4 @@
+import { FaceLandmarker } from '@mediapipe/tasks-vision';
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Room,
@@ -6,6 +7,7 @@ import {
   createLocalTracks,
   DisconnectReason,
 } from "livekit-client";
+import { Aniface } from "aniface";
 
 import { getConnectionDetails, leaveSession } from "./api.js";
 import ParticipantCard from "./ParticipantCard.jsx";
@@ -133,6 +135,36 @@ function syncParticipantSubscriptions(room, role) {
   }
 }
 
+async function avatarInit() {
+  const avatar = new Aniface({
+    canvasElement: document.getElementById('avatar'),
+    modelPath: 'raccoon_head_small.glb'
+    // No videoElement needed when using custom MediaPipe
+  });
+  await avatar.initialize();
+
+  const vision = await FilesetResolver.forVisionTasks(
+    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+  );
+  // Create MediaPipe instance with custom configuration
+  const myLandmarker = await FaceLandmarker.createFromOptions(vision, {
+    runningMode: 'VIDEO',
+    minFaceDetectionConfidence: 0.7,
+    minFacePresenceConfidence: 0.7,
+    minTrackingConfidence: 0.7
+    // ... other custom options
+  });
+
+  // Manual animation loop with custom MediaPipe
+  function animate() {
+    requestAnimationFrame(animate);
+    const results = myLandmarker.detectForVideo(video, performance.now());
+    console.log(results);
+    avatar.processLandmarkData(results);
+  }
+  animate();
+}
+
 export default function ParticipantView() {
   const { inviteId, key, token, roomName, name: urlName } = useMemo(parseInviteFromUrl, []);
   const storedSession = useMemo(() => loadStoredSession(inviteId, key), [inviteId, key]);
@@ -145,6 +177,10 @@ export default function ParticipantView() {
   const manualLeaveRef = useRef(false);
   const localTracksRef = useRef({ video: null, audio: null });
   const [serverOffline, setServerOffline] = useState(false);
+
+  useEffect(() => {
+    avatarInit();
+  }, [token, roomName, conn]);
 
   // Keep a single Room instance per "session"
   const roomRef = useRef(null);
@@ -546,6 +582,8 @@ export default function ParticipantView() {
           />
         ))}
       </div>
+
+      <canvas id="avatar" />
 
       <div style={{ marginTop: 12 }}>
         <button
