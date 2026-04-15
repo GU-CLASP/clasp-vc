@@ -1,4 +1,3 @@
-import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Room,
@@ -6,12 +5,12 @@ import {
   Track,
   createLocalTracks,
   DisconnectReason,
+  LocalVideoTrack,
 } from "livekit-client";
-import { Aniface } from "aniface";
+import { avatarInit } from "./avatar-publish.js";
 
 import { getConnectionDetails, leaveSession } from "./api.js";
 import ParticipantCard from "./ParticipantCard.jsx";
-import raccoonHeadModel from "./raccoon_head_small.glb?url";
 import {
   parseInviteFromUrl,
   parseBooleanAttr,
@@ -135,85 +134,6 @@ function syncParticipantSubscriptions(room, role) {
     }
   }
 }
-
-async function waitForVideoFrame(video) {
-  if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-    return;
-  }
-
-  await new Promise((resolve) => {
-    const onReady = () => {
-      video.removeEventListener("loadeddata", onReady);
-      video.removeEventListener("canplay", onReady);
-      resolve();
-    };
-
-    video.addEventListener("loadeddata", onReady, { once: true });
-    video.addEventListener("canplay", onReady, { once: true });
-  });
-}
-
-async function avatarInit(video, canvas) {
-  if (!(video instanceof HTMLVideoElement) || !(canvas instanceof HTMLCanvasElement)) {
-    return () => {};
-  }
-
-  const avatar = new Aniface({
-    canvasElement: canvas,
-    modelPath: raccoonHeadModel
-    // No videoElement needed when using custom MediaPipe
-  });
-  await avatar.initialize();
-
-  const vision = await FilesetResolver.forVisionTasks(
-    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-  );
-  // Create MediaPipe instance with custom configuration
-  const myLandmarker = await FaceLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
-      delegate: 'GPU',
-    },
-    minFaceDetectionConfidence: 0.7,
-    minFacePresenceConfidence: 0.7,
-    minTrackingConfidence: 0.7,
-    outputFaceBlendshapes: true,
-    outputFacialTransformationMatrixes: true,
-    runningMode: 'VIDEO',
-    numFaces: 1,
-    // ... other custom options
-  });
-
-  let cancelled = false;
-
-  await waitForVideoFrame(video);
-
-  // Manual animation loop with custom MediaPipe
-  function animate() {
-    if (cancelled) {
-      return;
-    }
-
-    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) {
-      requestAnimationFrame(animate);
-      return;
-    }
-
-    const results = myLandmarker.detectForVideo(video, performance.now());
-    if (timeIndex++ % 1000 == 20) {
-      console.log(results);
-    }
-    avatar.processLandmarkData(results);
-    requestAnimationFrame(animate);
-  }
-  animate();
-
-  return () => {
-    cancelled = true;
-    myLandmarker.close();
-  };
-}
-var timeIndex = 0;
 
 export default function ParticipantView() {
   const { inviteId, key, token, roomName, name: urlName } = useMemo(parseInviteFromUrl, []);
@@ -524,7 +444,13 @@ export default function ParticipantView() {
         const localAudio = tracks.find((t) => t.kind === Track.Kind.Audio) || null;
         document.getElementById('localVideo').srcObject = videoStream;
 
+        const canvas = document.getElementById("avatar");
         // localTracksRef.current = { video: localVideo, audio: localAudio };
+        const canvasStream = canvas.captureStream();
+        for (const track of canvasStream.getTracks()) {
+          const localTrack = new LocalVideoTrack(track);
+          await room.localParticipant.publishTrack(localTrack);
+        }
 
         for (const t of tracks) {
           // await room.localParticipant.publishTrack(t);
@@ -662,9 +588,11 @@ export default function ParticipantView() {
         ))}
       </div>
 
-      <h3>Avatar</h3>
-      <video id="localVideo" autoPlay muted playsInline />
-      <canvas id="avatar" />
+      <div style={{display: 'none'}}>
+        <h3>Avatar</h3>
+        <video id="localVideo" autoPlay muted playsInline />
+        <canvas id="avatar" />
+      </div>
 
       <div style={{ marginTop: 12 }}>
         <button
