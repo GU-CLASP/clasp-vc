@@ -1,3 +1,5 @@
+const USE_AVATARS = true;
+
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Room,
@@ -6,6 +8,7 @@ import {
   createLocalTracks,
   DisconnectReason,
   LocalVideoTrack,
+  LocalAudioTrack,
 } from "livekit-client";
 import { avatarInit } from "./avatar-publish.js";
 
@@ -21,6 +24,41 @@ import {
 } from "./app-utils.js";
 import { clearRoom } from "./app-utils.js";
 import { useDelays } from "../../shared/shared.js";
+
+/**
+ * @returns Promise<Array<LocalTrack>>
+ */
+async function getTracksToPublish() {
+  if (!USE_AVATARS) {
+    // Publish local tracks (cam + mic). If permissions fail, stay connected.
+    return await createLocalTracks({
+      audio: true,
+      video: true,
+    });
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: true,
+    video: true,
+  });
+
+  const videoStream = new MediaStream(stream.getVideoTracks());
+  const audioStream = new MediaStream(stream.getAudioTracks());
+  document.getElementById('localVideo').srcObject = videoStream;
+
+  const canvas = document.getElementById("avatar");
+  const canvasStream = canvas.captureStream(24);
+  const localTracks = [];
+  for (const track of canvasStream.getTracks()) {
+    const localTrack = new LocalVideoTrack(track);
+    localTracks.push(localTrack);
+  }
+  for (const track of audioStream.getTracks()) {
+    const localTrack = new LocalAudioTrack(track);
+    localTracks.push(localTrack);
+  }
+  return localTracks;
+}
 
 function buildParticipantList(room) {
   const local = room.localParticipant;
@@ -424,36 +462,16 @@ export default function ParticipantView() {
       }
 
       try {
-        // Publish local tracks (cam + mic). If permissions fail, stay connected.
-
-        /*const tracks = await createLocalTracks({
-          audio: true,
-          video: true,
-        });*/
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: true,
-        });
-        const tracks = stream.getTracks();
-
-        const videoStream = new MediaStream(stream.getVideoTracks());
-        const audioStream = new MediaStream(stream.getAudioTracks());
+        const tracks = await getTracksToPublish();
+        console.log("Received tracks", tracks);
 
         const localVideo = tracks.find((t) => t.kind === Track.Kind.Video) || null;
         const localAudio = tracks.find((t) => t.kind === Track.Kind.Audio) || null;
-        document.getElementById('localVideo').srcObject = videoStream;
 
-        const canvas = document.getElementById("avatar");
-        // localTracksRef.current = { video: localVideo, audio: localAudio };
-        const canvasStream = canvas.captureStream();
-        for (const track of canvasStream.getTracks()) {
-          const localTrack = new LocalVideoTrack(track);
-          await room.localParticipant.publishTrack(localTrack);
-        }
+        localTracksRef.current = { video: localVideo, audio: localAudio };
 
         for (const t of tracks) {
-          // await room.localParticipant.publishTrack(t);
+          await room.localParticipant.publishTrack(t);
         }
         forceRender();
       } catch (e) {
