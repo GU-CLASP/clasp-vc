@@ -1,6 +1,5 @@
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { Aniface } from "aniface";
-import raccoonHeadModel from "./raccoon_head_small.glb?url";
 
 async function waitForVideoFrame(video) {
   if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
@@ -19,17 +18,17 @@ async function waitForVideoFrame(video) {
   });
 }
 
-export async function avatarInit(video, canvas) {
+export async function avatarInit(video, canvas, model) {
   if (!(video instanceof HTMLVideoElement) || !(canvas instanceof HTMLCanvasElement)) {
     return () => {};
   }
 
+  console.log(`Using model ${model.name}`);
   const avatar = new Aniface({
     canvasElement: canvas,
-    modelPath: raccoonHeadModel,
-    modelOptions: {
-      axisMapping: 'standard',
-    }
+    modelPath: model.model,
+    cameraConfig: model.cameraConfig,
+    modelOptions: model.modelOptions,
     // No videoElement needed when using custom MediaPipe
   });
   await avatar.initialize();

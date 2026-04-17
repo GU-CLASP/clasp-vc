@@ -1,3 +1,5 @@
+import { modelOptions } from './avatar-models';
+
 const USE_AVATARS = true;
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
@@ -24,6 +26,7 @@ import {
 } from "./app-utils.js";
 import { clearRoom } from "./app-utils.js";
 import { useDelays } from "../../shared/shared.js";
+import { checkAllAvatars } from "./avatar-check.ts";
 
 /**
  * @returns Promise<Array<LocalTrack>>
@@ -179,12 +182,19 @@ export default function ParticipantView() {
   const [savedIdentity, setSavedIdentity] = useState(storedSession?.identity || "");
   const [name, setName] = useState(urlName || storedSession?.name || "");
   const [conn, setConn] = useState(null);
+  const [avatar, setAvatar] = useState(modelOptions[0]);
   const [err, setErr] = useState("");
   const [status, setStatus] = useState("idle"); // idle | connecting | connected | error
   const [autoJoinBlocked, setAutoJoinBlocked] = useState(false);
   const manualLeaveRef = useRef(false);
   const localTracksRef = useRef({ video: null, audio: null });
   const [serverOffline, setServerOffline] = useState(false);
+
+  function onModelSelectionChanged(e) {
+    const selectedModel = modelOptions[e.target.selectedIndex];
+    console.log(`Selected avatar model: ${selectedModel.name}`);
+    setAvatar(selectedModel);
+  }
 
   useEffect(() => {
     if (!conn) return undefined;
@@ -195,7 +205,7 @@ export default function ParticipantView() {
     let cancelled = false;
 
     (async () => {
-      dispose = await avatarInit(video, canvas);
+      dispose = await avatarInit(video, canvas, avatar);
       if (cancelled && dispose) {
         dispose();
       }
@@ -325,6 +335,11 @@ export default function ParticipantView() {
       onJoin();
     }
   }, [token, roomName, conn, onJoin]);
+
+  useEffect(() => {
+    console.log("checkAllAvatars");
+    checkAllAvatars();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -523,7 +538,19 @@ export default function ParticipantView() {
           </div>
         ) : null}
         <h2>Join session</h2>
-        <p>Enter an optional display name, then join.</p>
+
+        {
+          USE_AVATARS ? (
+            <div>
+              <p>Choose your avatar</p>
+              <select onChange={onModelSelectionChanged}>
+                {modelOptions.map((m) => <option value={m.name} key={m.name}>{m.name}</option>)}
+              </select>
+            </div>
+          ) : null
+        }
+
+        <p>Enter your name, then click join.</p>
 
         <label style={{ display: "block", marginTop: 12 }}>
           Display name (optional)
