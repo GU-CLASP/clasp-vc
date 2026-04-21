@@ -786,6 +786,8 @@ function CompositePreview({ conn, delayEffects, participantMetaByIdentity, onAdm
 function PreviewTile({ participant, displayName, displayIdentity, meta, onAdmit }) {
   const videoRef = useRef(null);
   const audioRef = useRef(null);
+  const [volume, setVolume] = useState(100);
+  const [muted, setMuted] = useState(false);
   const tracks = Array.from(participant.trackPublications.values());
   const videoPub = tracks.find(
     (t) => t.kind === Track.Kind.Video && t.track && t.isSubscribed
@@ -856,7 +858,18 @@ function PreviewTile({ participant, displayName, displayIdentity, meta, onAdmit 
           }}
         />
       </div>
-      <audio ref={audioRef} />
+      <audio ref={audioRef} volume={volume / 100} />
+      <div>
+        <button onClick={() => setMuted(!muted)}>{ muted ? "🔇" : "🔊" }</button>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step="1"
+          value={volume}
+          onChange={(e) => setVolume(e.target.value)}
+        />
+      </div>
       <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
         {admissionStatus === "admitted" ? "Admitted" : "Waiting"}
       </div>
