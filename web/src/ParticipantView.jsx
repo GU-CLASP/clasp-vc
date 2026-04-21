@@ -553,7 +553,7 @@ export default function ParticipantView() {
         <p>Enter your name, then click join.</p>
 
         <label style={{ display: "block", marginTop: 12 }}>
-          Display name (optional)
+          Display name
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -563,6 +563,7 @@ export default function ParticipantView() {
         </label>
 
         <button
+          disabled={name.length == 0}
           onClick={onJoin}
           style={{ marginTop: 12, padding: "10px 14px", cursor: "pointer" }}
         >
