@@ -84,3 +84,4 @@ services:
       - NODE_ENV=development
       - VITE_BASE_PATH=${VITE_BASE_PATH}
       - VITE_ALLOWED_HOSTS=${VITE_ALLOWED_HOSTS}
+      - USE_AVATARS=${USE_AVATARS:-false}

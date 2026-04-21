@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     base,
+    envPrefix: ["VITE_", "USE_"],
     plugins: [react()],
     server: {
       ...(allowedHosts ? { allowedHosts } : {}),

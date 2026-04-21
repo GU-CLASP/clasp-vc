@@ -1,6 +1,6 @@
 import { modelOptions } from './avatar-models';
 
-const USE_AVATARS = true;
+const USE_AVATARS = String(import.meta.env.USE_AVATARS || "false").toLowerCase() === "true";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {

@@ -23,6 +23,7 @@ The most important variables in `.env`:
 - `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_KEYS`: LiveKit server credentials.
 - `VITE_BASE_PATH`: Base path for web UI routing (default `/`).
 - `VITE_ALLOWED_HOSTS`: Allowed hostnames for Vite dev server (comma-separated, or `all`).
+- `USE_AVATARS`: Enables avatar publishing in the participant UI when set to `true` (default `false`).
 
 ### Development (Localhost)
 
@@ -32,6 +33,7 @@ The most important variables in `.env`:
    `LIVEKIT_URL=ws://127.0.0.1:7880`
    `LIVEKIT_URL_INTERNAL=ws://127.0.0.1:7880`
 3. Start the stack: `./clasp-vc up`
+   To enable avatars for that run, use `./clasp-vc up --avatars`.
 4. To check status and links: `./clasp-vc status`
 5. Stop everything: `./clasp-vc down`
 

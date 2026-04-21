@@ -64,14 +64,21 @@ def wait_for_health(url, timeout_seconds=60):
 
 
 def usage():
-    print("Usage: clasp-vc up | clasp-vc down | clasp-vc status", file=sys.stderr)
+    print(
+        "Usage: clasp-vc up [--avatars] | clasp-vc down | clasp-vc status | clasp-vc restart [--avatars]",
+        file=sys.stderr,
+    )
 
 
-def run_podman_compose(args, capture_stdout=False):
+def run_podman_compose(args, capture_stdout=False, extra_env=None):
+    env = os.environ.copy()
+    if extra_env:
+        env.update(extra_env)
     try:
         result = subprocess.run(
             ["podman-compose", *args],
             cwd=REPO_DIR,
+            env=env,
             stdout=subprocess.PIPE if capture_stdout else subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
@@ -165,14 +172,15 @@ def do_status():
     return 0
 
 
-def do_up():
+def do_up(use_avatars=False):
     admin_key, public_base_url = load_runtime_config()
+    compose_env = {"USE_AVATARS": "true" if use_avatars else "false"}
 
     if not admin_key:
         print("ADMIN_KEY is missing. Set it in .env or your environment.", file=sys.stderr)
         return 1
 
-    running = run_podman_compose(["ps", "-q"], capture_stdout=True)
+    running = run_podman_compose(["ps", "-q"], capture_stdout=True, extra_env=compose_env)
     if running is None:
         return 1
     if running.returncode != 0:
@@ -183,7 +191,7 @@ def do_up():
         return 1
 
     print("starting containers...")
-    up_run = run_podman_compose(["up", "-d"])
+    up_run = run_podman_compose(["up", "-d"], extra_env=compose_env)
     if up_run is None:
         return 1
     if up_run.returncode != 0:
@@ -240,23 +248,35 @@ def do_up():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 1:
+    args = sys.argv[1:]
+
+    if not args:
         usage()
-        do_status()
-    elif len(sys.argv) != 2:
-        usage()
-        raise SystemExit(1)
-    elif sys.argv[1] == "down" or sys.argv[1] == "stop":
+        raise SystemExit(do_status())
+    else:
+        command = args[0]
+        extra_args = args[1:]
+        use_avatars = False
+
+        if "--avatars" in extra_args:
+            use_avatars = True
+            extra_args = [arg for arg in extra_args if arg != "--avatars"]
+
+        if extra_args:
+            usage()
+            raise SystemExit(1)
+
+    if command == "down" or command == "stop":
         raise SystemExit(do_down())
-    elif sys.argv[1] == "restart":
+    elif command == "restart":
         result = do_down()
         if result != 0:
             raise SystemExit(result)
-        raise SystemExit(do_up())
-    elif sys.argv[1] == "status":
+        raise SystemExit(do_up(use_avatars=use_avatars))
+    elif command == "status":
         raise SystemExit(do_status())
-    elif sys.argv[1] == "up" or sys.argv[1] == "start":
-        raise SystemExit(do_up())
+    elif command == "up" or command == "start":
+        raise SystemExit(do_up(use_avatars=use_avatars))
     else:
         usage()
         raise SystemExit(1)
