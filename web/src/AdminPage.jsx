@@ -858,7 +858,7 @@ function PreviewTile({ participant, displayName, displayIdentity, meta, onAdmit 
           }}
         />
       </div>
-      <audio ref={audioRef} volume={volume / 100} />
+      <audio ref={audioRef} volume={volume / 100} muted={muted} />
       <div>
         <button onClick={() => setMuted(!muted)}>{ muted ? "🔇" : "🔊" }</button>
         <input
