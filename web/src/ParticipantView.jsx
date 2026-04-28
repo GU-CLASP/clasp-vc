@@ -36,13 +36,15 @@ async function getTracksToPublish() {
     // Publish local tracks (cam + mic). If permissions fail, stay connected.
     return await createLocalTracks({
       audio: true,
-      video: true,
+      video: { facingMode: "environment" },
     });
   }
 
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: true,
-    video: true,
+    video: {
+      facingMode: "environment"
+    },
   });
 
   const videoStream = new MediaStream(stream.getVideoTracks());
