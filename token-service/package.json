@@ -7,11 +7,11 @@
   },
   "dependencies": {
     "@eslint/js": "^10.0.1",
-    "@livekit/rtc-node": "^0.13.18",
-    "cors": "^2.8.5",
-    "eslint": "^10.0.3",
+    "@livekit/rtc-node": "^0.13.27",
+    "cors": "^2.8.6",
+    "eslint": "^10.3.0",
     "express": "^4.19.2",
-    "globals": "^17.4.0",
-    "livekit-server-sdk": "^2.15.0"
+    "globals": "^17.6.0",
+    "livekit-server-sdk": "^2.15.2"
   }
 }
