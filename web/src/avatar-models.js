@@ -1,7 +1,15 @@
 import raccoonHeadModel from "./avatars/raccoon_head_small.glb?url";
 import rpmAvatar from "./avatars/rpm_avatar.glb?url";
+import babyModel from "./avatars/baby-shapes.glb?url";
 
 export const modelOptions = [
+  {
+    name: "Baby",
+    model: babyModel,
+    modelOptions: {
+      scale: 0.4,
+    }
+  },
   {
     name: "Raccoon",
     model: raccoonHeadModel,
