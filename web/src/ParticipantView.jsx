@@ -378,8 +378,8 @@ export default function ParticipantView() {
 
     let cancelled = false;
     const room = new Room({
-      adaptiveStream: true,
-      dynacast: true,
+      adaptiveStream: false,
+      dynacast: false,
     });
     roomRef.current = room;
 
