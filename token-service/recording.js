@@ -130,7 +130,18 @@ async function startParticipantEgress(room, recordingBase, participantIdentity, 
     room,
     participantIdentity,
     { file: fileOutput },
-    { encodingOptions: EncodingOptionsPreset.H264_720P_30 }
+    {
+      encodingOptions: {
+        width: 1280,
+        height: 720,
+        framerate: 30,
+        videoCodec: VideoCodec.H264_MAIN,
+        videoBitrate: 3000,
+        audioCodec: AudioCodec.AAC,
+        audioBitrate: 128,
+        audioFrequency: 48000,
+      },
+    }
   );
   return info.egressId || info.egress_id || null;
 }
