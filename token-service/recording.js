@@ -1,9 +1,11 @@
 import { app } from "./express.js";
 import {
+  AudioCodec,
   EgressClient,
   EncodedFileOutput,
   EncodedFileType,
   EncodingOptionsPreset,
+  VideoCodec,
 } from "livekit-server-sdk";
 import fs from "fs";
 import path from "path";
