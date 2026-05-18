@@ -639,7 +639,7 @@ export default function ParticipantView() {
       <div style={{display: 'none'}}>
         <h3>Avatar</h3>
         <video id="localVideo" autoPlay muted playsInline />
-        <canvas id="avatar" />
+        <canvas id="avatar" width={800} height={600} />
       </div>
 
       <div style={{ marginTop: 12 }}>
