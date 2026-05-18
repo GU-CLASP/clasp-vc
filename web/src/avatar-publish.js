@@ -28,6 +28,7 @@ export async function avatarInit(video, canvas, model) {
     canvasElement: canvas,
     modelPath: model.model,
     cameraConfig: model.cameraConfig,
+    blendshapeMultipliers: model.blendshapeMultipliers,
     modelOptions: model.modelOptions,
     // No videoElement needed when using custom MediaPipe
   });
