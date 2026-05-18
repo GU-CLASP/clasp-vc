@@ -9,11 +9,16 @@ import fireLady from "./avatars/fire-lady.glb?url";
 import harry from "./avatars/harry.glb?url";
 import zhenja from "./avatars/zhenja.glb?url";
 
+const reducedLeftRightHeadTurns = {
+  yaw: 0.55,
+};
+
 export const modelOptions = [
   // [x, y, z] is: left-right (horizontal), up-down (vertical), faraway-close (depth)
   {
     name: "Andra",
     model: andra,
+    headRotationDamping: reducedLeftRightHeadTurns,
     cameraConfig: {
       fov: 60,
       position: [0, 1.65, 1.2],
@@ -29,6 +34,7 @@ export const modelOptions = [
   {
     name: "Ashima",
     model: ashima,
+    headRotationDamping: reducedLeftRightHeadTurns,
     cameraConfig: {
       fov: 60,
       position: [0, 1.65, 1.2],
@@ -44,6 +50,7 @@ export const modelOptions = [
   {
     name: "FireLady",
     model: fireLady,
+    headRotationDamping: reducedLeftRightHeadTurns,
     cameraConfig: {
       fov: 60,
       position: [0, 1.8, 1.2],
@@ -59,6 +66,7 @@ export const modelOptions = [
   {
     name: "Cyborg",
     model: cyborg,
+    headRotationDamping: reducedLeftRightHeadTurns,
     cameraConfig: {
       fov: 60,
       position: [0, 2.0, 1.2],
@@ -74,6 +82,7 @@ export const modelOptions = [
   {
     name: "Harry Potter",
     model: harry,
+    headRotationDamping: reducedLeftRightHeadTurns,
     cameraConfig: {
       fov: 60,
       position: [0, 1.9, 1.2],
@@ -89,6 +98,7 @@ export const modelOptions = [
   {
     name: "Babyglb",
     model: babyModel,
+    headRotationDamping: reducedLeftRightHeadTurns,
     cameraConfig: {
       fov: 60,
       position: [0, 0, 6.2],
@@ -105,6 +115,7 @@ export const modelOptions = [
   {
     name: "Baby2",
     model: babyModel2,
+    headRotationDamping: reducedLeftRightHeadTurns,
     cameraConfig: {
       fov: 60,
       position: [0, -3, 6.2],
@@ -117,6 +128,7 @@ export const modelOptions = [
   {
     name: "Zhenja",
     model: zhenja,
+    headRotationDamping: reducedLeftRightHeadTurns,
     cameraConfig: {
       fov: 60,
       position: [0, 1.65, 1.2],
@@ -132,10 +144,12 @@ export const modelOptions = [
   {
     name: "Raccoon",
     model: raccoonHeadModel,
+    headRotationDamping: reducedLeftRightHeadTurns,
   },
   {
     name: "Ready Player Me",
     model: rpmAvatar,
+    headRotationDamping: reducedLeftRightHeadTurns,
     cameraConfig: {
       fov: 60,
       position: [0, 1.65, 1.2],
