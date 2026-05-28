@@ -243,7 +243,23 @@ def do_up(use_avatars=False):
     now = datetime.datetime.now()
     time = str(now)
     with open("link.html", "w", encoding="utf-8") as handle:
-        handle.write(f"Invite link: <a href=\"{invite_url}\">Invite link as of {time}</a>")
+        handle.write(f'''
+            <p>
+                <a href="{invite_url}">Video conference link as of {time}</a>
+            </p>
+            <p>
+                TODO: Add link to Questionnaire balloon task
+            </p>
+            <p>
+                TODO: Add link to Questionnaire mingle task
+            </p>
+            <p>
+                <a href="https://forms.cloud.microsoft/e/kw28HNUYD6">Questionnaire for jokes task</a>
+            </p>
+            <p>
+                TODO: Add link to Post-questionnaire
+            </p>
+        ''')
     return 0
 
 
