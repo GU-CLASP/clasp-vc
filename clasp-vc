@@ -248,16 +248,19 @@ def do_up(use_avatars=False):
                 <a href="{invite_url}">Video conference link as of {time}</a>
             </p>
             <p>
-                TODO: Add link to Questionnaire balloon task
+                <a href="https://dev.clasp.gu.se/webchat">Post-experiment questionnaire</a>
             </p>
             <p>
-                TODO: Add link to Questionnaire mingle task
+                <a href="https://forms.cloud.microsoft/e/L3zjEiDQ0r">Questionnaire for balloon task</a>
+            </p>
+            <p>
+                <a href="https://forms.cloud.microsoft/e/rURPdaXzLL">Questionnaire for mingle task</a>
             </p>
             <p>
                 <a href="https://forms.cloud.microsoft/e/kw28HNUYD6">Questionnaire for jokes task</a>
             </p>
             <p>
-                TODO: Add link to Post-questionnaire
+                <a href="https://forms.cloud.microsoft/e/BDsV4QhLrH">Post-experiment questionnaire</a>
             </p>
         ''')
     return 0
