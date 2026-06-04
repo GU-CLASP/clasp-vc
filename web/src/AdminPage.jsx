@@ -561,6 +561,7 @@ export default function AdminPage() {
                 conn={previewConn}
                 delayEffects={delayEffects}
                 participantMetaByIdentity={participantMetaByIdentity}
+                allowAdmit={anyRecordingActive}
                 onAdmit={handleAdmitParticipant}
                 onDisconnect={() => {
                   setPreviewConn(null);
@@ -715,7 +716,7 @@ function attachTrack(el, track) {
   return attachedEl;
 }
 
-function CompositePreview({ conn, delayEffects, participantMetaByIdentity, onAdmit, onDisconnect }) {
+function CompositePreview({ conn, delayEffects, participantMetaByIdentity, allowAdmit, onAdmit, onDisconnect }) {
   const roomRef = useRef(null);
   const [, bump] = useState(0);
 
@@ -775,6 +776,7 @@ function CompositePreview({ conn, delayEffects, participantMetaByIdentity, onAdm
             displayName={p.displayName}
             displayIdentity={p.displayIdentity}
             meta={participantMetaByIdentity?.get(p.displayIdentity)}
+            allowAdmit={allowAdmit}
             onAdmit={onAdmit}
           />
         ))
@@ -783,7 +785,7 @@ function CompositePreview({ conn, delayEffects, participantMetaByIdentity, onAdm
   );
 }
 
-function PreviewTile({ participant, displayName, displayIdentity, meta, onAdmit }) {
+function PreviewTile({ participant, displayName, displayIdentity, meta, allowAdmit, onAdmit }) {
   const videoRef = useRef(null);
   const audioRef = useRef(null);
   const [volume, setVolume] = useState(100);
@@ -878,6 +880,7 @@ function PreviewTile({ participant, displayName, displayIdentity, meta, onAdmit 
       </div>
       {admissionStatus !== "admitted" ? (
         <button
+          disabled={!allowAdmit}
           onClick={() => onAdmit?.(displayIdentity || participant.identity)}
           style={{
             marginTop: 8,
@@ -892,6 +895,7 @@ function PreviewTile({ participant, displayName, displayIdentity, meta, onAdmit 
           }}
         >
           Admit
+          {allowAdmit ? "" : "WARNING: RECORDING NOT STARTED!"}
         </button>
       ) : null}
     </div>
