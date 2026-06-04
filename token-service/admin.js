@@ -2,7 +2,7 @@ import { app } from "./express.js";
 import {
   AccessToken,
 } from "livekit-server-sdk";
-import { requireAdmin, randomId, toWsUrl, parseBooleanAttr } from "./utils.js";
+import { requireAdmin, randomId, toWsUrl, parseBooleanAttr, DEFAULT_SHOW_SELF } from "./utils.js";
 import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL, DEFAULT_ROOM_NAME, roomService } from "./livekit-api.js";
 import { identitySessions } from "./identity-sessions.js";
 import { removeDelay } from "./delays.js";
@@ -176,7 +176,7 @@ app.get("/api/admin/rooms/:roomName/participants", requireAdmin, async (req, res
 
     const formatted = participants.map((p) => {
       const session = identitySessions.get(p.identity);
-      const showSelf = parseBooleanAttr(p?.attributes?.showSelf, session?.showSelf ?? true);
+      const showSelf = parseBooleanAttr(p?.attributes?.showSelf, session?.showSelf ?? DEFAULT_SHOW_SELF);
       return {
         identity: p.identity,
         name: p.name,
@@ -202,7 +202,7 @@ app.get("/api/admin/rooms/:roomName/participants", requireAdmin, async (req, res
         state: session.admissionStatus === "admitted" ? "offline" : "waiting",
         present: false,
         placeholder: true,
-        showSelf: session.showSelf ?? true,
+        showSelf: session.showSelf ?? DEFAULT_SHOW_SELF,
         admissionStatus: session.admissionStatus || "pending",
         tracks: [],
       });

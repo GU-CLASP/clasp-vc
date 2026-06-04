@@ -3,7 +3,7 @@ import {
 } from "livekit-server-sdk";
 import { getExistingDelay, setParticipantDelay } from "./delays.js";
 import { app } from "./express.js";
-import { randomId, nowSec, requireAdmin, sha256, sanitizeIdentity, toWsUrl } from "./utils.js";
+import { randomId, nowSec, requireAdmin, sha256, sanitizeIdentity, toWsUrl, DEFAULT_SHOW_SELF } from "./utils.js";
 import { identitySessions } from "./identity-sessions.js";
 import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL, DEFAULT_ROOM_NAME, PUBLIC_BASE_URL, roomService } from "./livekit-api.js";
 import { scheduleSync } from "./subscription-logic.js";
@@ -111,7 +111,7 @@ app.post("/api/connection-details", async (req, res) => {
         inviteId,
         room: inv.room,
         name: displayName,
-        showSelf: true,
+        showSelf: DEFAULT_SHOW_SELF,
         admissionStatus: "pending",
       };
       identitySessions.set(identity, session);
@@ -120,7 +120,7 @@ app.post("/api/connection-details", async (req, res) => {
       identitySessions.set(identity, session);
     }
 
-    const showSelf = session.showSelf ?? true;
+    const showSelf = session.showSelf ?? DEFAULT_SHOW_SELF;
 
     const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
       identity,

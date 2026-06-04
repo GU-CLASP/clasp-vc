@@ -2,6 +2,8 @@ import crypto from "crypto";
 
 const ADMIN_KEY = mustEnv("ADMIN_KEY");
 
+export const DEFAULT_SHOW_SELF = true;
+
 export function sha256(s) {
   return crypto.createHash("sha256").update(s).digest("hex");
 }
