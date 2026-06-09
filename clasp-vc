@@ -248,7 +248,7 @@ def do_up(use_avatars=False):
                 <a href="{invite_url}">Video conference link as of {time}</a>
             </p>
             <p>
-                <a href="https://dev.clasp.gu.se/webchat">Post-experiment questionnaire</a>
+                <a href="https://dev.clasp.gu.se/webchat">Webchat</a>
             </p>
             <p>
                 <a href="https://forms.cloud.microsoft/e/L3zjEiDQ0r">Questionnaire for balloon task</a>
