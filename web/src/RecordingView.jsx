@@ -99,6 +99,7 @@ export default function RecordingView() {
     room
       .on(RoomEvent.ParticipantConnected, onAnyUpdate)
       .on(RoomEvent.ParticipantDisconnected, onAnyUpdate)
+      .on(RoomEvent.ParticipantAttributesChanged, onAnyUpdate)
       .on(RoomEvent.TrackSubscribed, onAnyUpdate)
       .on(RoomEvent.TrackUnsubscribed, onAnyUpdate);
 
@@ -173,13 +174,23 @@ export default function RecordingView() {
         }}
       >
         {participants.map((p) => (
-          <ParticipantCard
-            key={p.key}
-            room={room}
-            participant={p.participant}
-            displayName={p.displayName}
-            displayIdentity={p.displayIdentity}
-          />
+          <div key={p.key}>
+            <div
+              style={{
+                color: "#fff",
+                padding: "0 10px 8px",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {JSON.stringify(p.participant.attributes)}
+            </div>
+            <ParticipantCard
+              room={room}
+              participant={p.participant}
+              displayName={p.displayName}
+              displayIdentity={p.displayIdentity}
+            />
+          </div>
         ))}
       </div>
       {status !== "connected" ? (
